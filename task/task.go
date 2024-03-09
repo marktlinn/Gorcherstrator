@@ -17,7 +17,9 @@ const (
 	Complete
 )
 
-// Task represents all the associated properties a task possesses.
+// Task is the most foundational element fo the Gorchestrator.
+// A Task sits at the lowest point, under the Worker, it
+// represents all the associated properties a task possesses.
 type Task struct {
 	ID            uuid.UUID
 	State         State
