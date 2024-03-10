@@ -1,7 +1,7 @@
 package node
 
 // A Node represents a physical machine within a Cluster.
-type node struct {
+type Node struct {
 	Name            string
 	IP              string
 	Memory          int
