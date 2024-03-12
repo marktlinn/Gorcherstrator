@@ -61,7 +61,7 @@ type Config struct {
 	CPU           float64
 	Image         string
 	Disk          int64
-	RestartPolicy string // ["", "always", "unless-stopped", "on-failure"]
+	RestartPolicy container.RestartPolicyMode // ["", "always", "unless-stopped", "on-failure"]
 	Env           []string
 	ExposedPorts  nat.PortSet
 }
