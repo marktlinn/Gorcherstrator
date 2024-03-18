@@ -31,13 +31,15 @@ const (
 // represents all the associated properties a task possesses.
 type Task struct {
 	ID            uuid.UUID
+	ContainerId   string
 	State         State
+	CPU           float64
 	Name          string
-	Disk          int
-	Memory        int
+	Disk          int64
+	Memory        int64
 	Image         string
 	ExposedPorts  nat.PortSet
-	RestartPolicy string
+	RestartPolicy container.RestartPolicyMode
 	portBindings  map[string]string
 	StartTime     time.Time
 	FinishTime    time.Time
@@ -66,11 +68,32 @@ type Config struct {
 	ExposedPorts  nat.PortSet
 }
 
+func NewConfig(t *Task) *Config {
+	return &Config{
+		Name:          t.Name,
+		CPU:           t.CPU,
+		Memory:        t.Memory,
+		Image:         t.Image,
+		Disk:          t.Disk,
+		RestartPolicy: t.RestartPolicy,
+		ExposedPorts:  t.ExposedPorts,
+	}
+}
+
 // Docker encapsulates all the data needed to run Tasks inside
 // a Docker container.
 type Docker struct {
 	Client *client.Client
 	Config Config
+}
+
+// Creates a NewDocker clients with options.
+func NewDocker(c *Config) *Docker {
+	dc, _ := client.NewClientWithOpts(client.FromEnv)
+	return &Docker{
+		Client: dc,
+		Config: *c,
+	}
 }
 
 // DockerResult provides an API wrapper for the interactions with a Docker Container.
@@ -115,7 +138,14 @@ func (d *Docker) Run() DockerResult {
 		ExposedPorts: d.Config.ExposedPorts,
 	}
 
-	resp, err := d.Client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, nil, d.Config.Name)
+	resp, err := d.Client.ContainerCreate(
+		ctx,
+		&containerConfig,
+		&hostConfig,
+		nil,
+		nil,
+		d.Config.Name,
+	)
 	if err != nil {
 		log.Printf("Erro starting Docker Container -> %s: %v", d.Config.Image, err)
 		return DockerResult{Error: err}
@@ -149,7 +179,6 @@ func (d *Docker) Stop(id string) DockerResult {
 		RemoveVolumes: true,
 		RemoveLinks:   false,
 	})
-
 	if err != nil {
 		log.Printf("Error: unable to remove container -> %s: %v\n", id, err)
 	}

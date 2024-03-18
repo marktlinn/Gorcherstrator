@@ -2,6 +2,8 @@ package worker
 
 import (
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -35,8 +37,22 @@ func (w *Worker) StartTask() {
 }
 
 // StopTask stops a Task.
-func (w *Worker) StopTask() {
-	fmt.Println("task stopped...")
+func (w *Worker) StopTask(t task.Task) task.DockerResult {
+	config := task.NewConfig(&t)
+	docker := task.NewDocker(config)
+
+	result := docker.Stop(t.ContainerId)
+	if result.Error != nil {
+		log.Printf("Error stopping container %v: %v\n",
+			t.ContainerId,
+			result.Error,
+		)
+	}
+	t.FinishTime = time.Now().UTC()
+	t.State = task.Complete
+	w.DB[t.ID] = &t
+	log.Printf("Container %v stopped and removed for task %v", t.ContainerId, t.ID)
+	return result
 }
 
 // CollectStats collects and outputs data about the worker.
