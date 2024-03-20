@@ -31,28 +31,51 @@ func (w *Worker) RunTask() {
 	fmt.Println("task running...")
 }
 
-// StartTask starts a Task.
-func (w *Worker) StartTask() {
-	fmt.Println("task started...")
-}
-
 // StopTask stops a Task.
 func (w *Worker) StopTask(t task.Task) task.DockerResult {
 	config := task.NewConfig(&t)
 	docker := task.NewDocker(config)
 
-	result := docker.Stop(t.ContainerId)
+	result := docker.Stop(t.ContainerID)
 	if result.Error != nil {
 		log.Printf("Error stopping container %v: %v\n",
-			t.ContainerId,
+			t.ContainerID,
 			result.Error,
 		)
 	}
 	t.FinishTime = time.Now().UTC()
 	t.State = task.Complete
 	w.DB[t.ID] = &t
-	log.Printf("Container %v stopped and removed for task %v", t.ContainerId, t.ID)
+	log.Printf("Container %v stopped and removed for task %v", t.ContainerID, t.ID)
 	return result
+}
+
+// Starts a task, setting the start time of the task
+// and creating a Docker instance to communicate with the Docker
+// Daemon.
+func (w *Worker) StartTask(t task.Task) task.DockerResult {
+	t.StartTime = time.Now().UTC()
+	config := task.NewConfig(&t)
+	d := task.NewDocker(config)
+	result := d.Run()
+
+	if result.Error != nil {
+		log.Printf("Error running task %v: %v\n", t.ID, result.Error)
+		w.DB[t.ID] = &t
+		t.State = task.Failed
+		return result
+	}
+
+	t.State = task.Running
+	t.ContainerID = result.ContainerID
+	w.DB[t.ID] = &t
+
+	return result
+}
+
+// Enqueues a task to the Worker queue
+func (w *Worker) QueueTask(t task.Task) {
+	w.Queue.Enqueue(t)
 }
 
 // CollectStats collects and outputs data about the worker.

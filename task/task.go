@@ -31,7 +31,7 @@ const (
 // represents all the associated properties a task possesses.
 type Task struct {
 	ID            uuid.UUID
-	ContainerId   string
+	ContainerID   string
 	State         State
 	CPU           float64
 	Name          string
