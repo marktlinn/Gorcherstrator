@@ -27,4 +27,18 @@ var stateTransitions = map[State][]State{
 	Complete:  {},
 }
 
-// TODO: Create container and stateValidation Aux funcs
+// Includes is an auxiliary function to to determine if a given
+// state is included within a slice of states
+func Includes(states []State, state State) bool {
+	for _, s := range states {
+		if s == state {
+			return true
+		}
+	}
+	return false
+}
+
+// checks if a stateTransition is possible form one state to another.
+func ValidStateTransition(st State, dest State) bool {
+	return Includes(stateTransitions[st], dest)
+}
