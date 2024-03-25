@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -27,8 +28,38 @@ type Worker struct {
 // RunTask assess the State of the Task.
 // If a Task is not started, RunTask starts the Task.
 // Else if a Task's state is started, RunTask will stop the task.
-func (w *Worker) RunTask() {
-	fmt.Println("task running...")
+func (w *Worker) RunTask() task.DockerResult {
+	t := w.Queue.Dequeue()
+	if t == nil {
+		log.Println("Queue is empty, no tasks to process")
+		return task.DockerResult{Error: nil}
+	}
+
+	queuedTask := t.(task.Task)
+
+	taskPersisted := w.DB[queuedTask.ID]
+	if taskPersisted == nil {
+		taskPersisted = &queuedTask
+		w.DB[queuedTask.ID] = &queuedTask
+	}
+
+	var result task.DockerResult
+	if task.ValidStateTransition(taskPersisted.State, queuedTask.State) {
+		switch queuedTask.State {
+		case task.Scheduled:
+			result = w.StartTask(queuedTask)
+		case task.Complete:
+			result = w.StopTask(queuedTask)
+		default:
+			unexpectedError := fmt.Errorf("undefined state of queued task: %s\n")
+			result.Error = errors.New(unexpectedError) task.State)
+		}
+	} else {
+		err := fmt.Error.New("error: transition from %s to %s is not valid", tasktaskPersisted.State, queuqueuedTask.State)
+		result.Error = err
+	}
+
+	return result
 }
 
 // StopTask stops a Task.
