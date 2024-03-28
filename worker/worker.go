@@ -51,11 +51,11 @@ func (w *Worker) RunTask() task.DockerResult {
 		case task.Complete:
 			result = w.StopTask(queuedTask)
 		default:
-			unexpectedError := fmt.Errorf("undefined state of queued task: %s\n")
-			result.Error = errors.New(unexpectedError) task.State)
+			unexpectedError := fmt.Errorf("undefined state of queued task: %+v\n", queuedTask.State).Error()
+			result.Error = errors.New(unexpectedError)
 		}
 	} else {
-		err := fmt.Error.New("error: transition from %s to %s is not valid", tasktaskPersisted.State, queuqueuedTask.State)
+		err := fmt.Errorf("error: transition from %+v to %+v is not valid", taskPersisted.State, queuedTask.State)
 		result.Error = err
 	}
 
