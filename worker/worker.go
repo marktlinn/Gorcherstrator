@@ -51,7 +51,8 @@ func (w *Worker) RunTask() task.DockerResult {
 		case task.Complete:
 			result = w.StopTask(queuedTask)
 		default:
-			unexpectedError := fmt.Errorf("undefined state of queued task: %+v\n", queuedTask.State).Error()
+			unexpectedError := fmt.Errorf("undefined state of queued task: %+v\n", queuedTask.State).
+				Error()
 			result.Error = errors.New(unexpectedError)
 		}
 	} else {
@@ -112,4 +113,13 @@ func (w *Worker) QueueTask(t task.Task) {
 // CollectStats collects and outputs data about the worker.
 func (w *Worker) CollectStats() {
 	fmt.Println("stats collected...")
+}
+
+// GetTasks returns a lists of Tasks within the Worker's DB.
+func (w *Worker) GetTasks() []*task.Task {
+	tasks := []*task.Task{}
+	for _, t := range w.DB {
+		tasks = append(tasks, t)
+	}
+	return tasks
 }
