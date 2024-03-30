@@ -18,8 +18,10 @@ import (
 // - Tracking the State of Tasks
 // - Accepting instruction from the Manager to run Tasks.
 type Worker struct {
-	Queue     queue.Queue
-	Name      string
+	// Queue represents the desired state of Tasks
+	Queue queue.Queue
+	Name  string
+	// DB represents the current actual state of the Tasks.
 	DB        map[uuid.UUID]*task.Task
 	TaskCount int
 }
