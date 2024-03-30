@@ -29,5 +29,5 @@ func (a *Api) initRouter() {
 // Starts the server and invokes the initRouter ensuring the routes are established.
 func (a *Api) Start() {
 	a.initRouter()
-	http.ListenAndServe(fmt.Sprintf("%s:%d", a.Address, a.Port))
+	http.ListenAndServe(fmt.Sprintf("%s:%d", a.Address, a.Port), a.Router)
 }
