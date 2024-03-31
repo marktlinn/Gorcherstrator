@@ -10,11 +10,6 @@ import (
 	"github.com/marktlinn/Gorcherstrator/task"
 )
 
-// TODO: Require routes
-// GET /tasks
-// POST /tasks
-// DELETE /tasks/{taskID}
-
 // Handles requests to initiate a new task. Extracts task details from a JSON-encoded
 // 'task.TaskEvent' in the request body, adds the task to the worker queue, and returns the task information to the client.
 func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -51,20 +46,24 @@ func (a *Api) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 // the worker's queue. This signals the worker to gracefully stop the original task.
 func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("taskID")
+	fmt.Printf("taskID is %s\n", taskID)
 	if taskID == "" {
-		log.Printf("TaskID not found in request")
+		log.Printf("TaskID not found in request\n")
 		w.WriteHeader(400)
 	}
 
 	taskUUID, _ := uuid.Parse(taskID)
+	fmt.Printf("UUID found: %v\n", taskUUID)
 	_, ok := a.Worker.DB[taskUUID]
 	if !ok {
-		log.Printf("No task matches task ID %v", taskUUID)
+		log.Printf("No task matches task ID %v\n", taskUUID)
 		w.WriteHeader(404)
 	}
 
 	targetTask := a.Worker.DB[taskUUID]
+	fmt.Printf("TargetTask: %+v\n", targetTask)
 	copiedTask := *targetTask
+	fmt.Printf("copiedTask: %+v\n", copiedTask)
 	copiedTask.State = task.Complete
 	a.Worker.QueueTask(copiedTask)
 

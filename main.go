@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/marktlinn/Gorcherstrator/task"
@@ -49,83 +51,33 @@ func stopContainer(d *task.Docker, id string) *task.DockerResult {
 	return &res
 }
 
+func runTasks(w *worker.Worker) {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.RunTask()
+			if result.Error != nil {
+				log.Printf("Error running task: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("No tasks to process currently.\n")
+		}
+		log.Println("Sleeping for 10 seconds.")
+		time.Sleep(10 * time.Second)
+	}
+}
+
 func main() {
+	host := os.Getenv("WORKER_HOST")
+	port, _ := strconv.Atoi(os.Getenv("WORKER_PORT"))
+
+	fmt.Println("Starting Worker")
+
 	w := worker.Worker{
-		Name:  "example_worker",
 		Queue: *queue.New(),
 		DB:    make(map[uuid.UUID]*task.Task),
 	}
+	api := worker.Api{Address: host, Port: port, Worker: &w}
 
-	t := task.Task{
-		ID:    uuid.New(),
-		Name:  "example_task",
-		State: task.Scheduled,
-		Image: "strm/helloworld-http",
-	}
-
-	log.Println("task starting")
-	w.QueueTask(t)
-	result := w.RunTask()
-	if result.Error != nil {
-		panic(result.Error)
-	}
-
-	t.ContainerID = result.ContainerID
-	fmt.Printf("task %s running in container: %s", t.ID, t.ContainerID)
-	fmt.Println("Sleepy time")
-	time.Sleep(time.Second * 30)
-	fmt.Printf("stopping task %s\n", t.ID)
-	t.State = task.Complete
-	w.QueueTask(t)
-	result = w.RunTask()
-	if result.Error != nil {
-		panic(result.Error)
-	}
-	// te := task.TaskEvent{
-	// 	ID:        uuid.New(),
-	// 	Task:      t,
-	// 	State:     task.Pending,
-	// 	Timestamp: time.Now(),
-	// }
-	//
-	// m := manager.Manager{
-	// 	Pending: *queue.New(),
-	// 	Workers: []string{w.Name},
-	// 	TaskDB:  make(map[string][]*task.Task),
-	// 	EventDB: make(map[string][]*task.TaskEvent),
-	// }
-	//
-	// n := node.Node{
-	// 	Name:   "example_node",
-	// 	IP:     "127.0.0.1",
-	// 	Memory: 512,
-	// 	Disk:   4,
-	// 	Role:   "worker",
-	// 	Cores:  4,
-	// }
-	//
-	// fmt.Printf("task: %v\n", t)
-	// fmt.Printf("task event: %v\n", te)
-	// fmt.Printf("worker: %v\n", w)
-	//
-	// w.CollectStats()
-	// w.RunTask()
-	// w.StartTask()
-	// w.StopTask()
-	//
-	// fmt.Printf("manager: %v\n", m)
-	// m.SelectWorker()
-	// m.UpdateTask()
-	// m.SendWork()
-	//
-	// fmt.Printf("node: %v\n", n)
-	//
-	// fmt.Println("creating a container...")
-	// dockerTask, res := createContainer()
-	// if res.Error != nil {
-	// 	fmt.Printf("%v", res.Error)
-	// 	os.Exit(1)
-	// }
-	// time.Sleep(time.Second * 5)
-	// stopContainer(dockerTask, res.ContainerID)
+	go runTasks(&w)
+	api.Start()
 }

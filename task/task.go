@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	imageTypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
@@ -97,7 +97,7 @@ type DockerResult struct {
 func (d *Docker) Run() DockerResult {
 	ctx := context.Background()
 	reader, err := d.Client.ImagePull(
-		ctx, d.Config.Image, types.ImagePullOptions{},
+		ctx, d.Config.Image, imageTypes.PullOptions{},
 	)
 	if err != nil {
 		log.Printf("Error, unable to pull image-> %s: %v\n", d.Config.Image, err)
@@ -155,22 +155,22 @@ func (d *Docker) Run() DockerResult {
 }
 
 func (d *Docker) Stop(id string) DockerResult {
-	log.Printf("Stopping contianer: %v\n", id)
+	log.Printf("Stopping container: %v\n", id)
 
 	ctx := context.Background()
-	err := d.Client.ContainerStop(ctx, id, container.StopOptions{})
-	if err != nil {
+	noWaitTimeout := 0
+	if err := d.Client.ContainerStop(ctx, id, container.StopOptions{Timeout: &noWaitTimeout}); err != nil {
 		log.Printf("Error: unable to stop container -> %s: %v\n", id, err)
 		return DockerResult{Error: err}
 	}
 
-	err = d.Client.ContainerRemove(ctx, id, container.RemoveOptions{
+	if err := d.Client.ContainerRemove(ctx, id, container.RemoveOptions{
 		Force:         false,
 		RemoveVolumes: true,
 		RemoveLinks:   false,
-	})
-	if err != nil {
+	}); err != nil {
 		log.Printf("Error: unable to remove container -> %s: %v\n", id, err)
+		return DockerResult{Error: err}
 	}
 
 	return DockerResult{Action: "stop", Result: "success", Error: nil}

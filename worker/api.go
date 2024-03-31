@@ -20,10 +20,10 @@ type Api struct {
 
 // initRouter initialises the Api Router setting up the necessary routes in the process.
 func (a *Api) initRouter() {
-	router := http.NewServeMux()
-	router.HandleFunc("POST /tasks", a.StartTaskHandler)
-	router.HandleFunc("GET /tasks", a.GetTaskHandler)
-	router.HandleFunc("DELETE /tasks/{taskID}", a.StartTaskHandler)
+	a.Router = http.NewServeMux()
+	a.Router.HandleFunc("POST /tasks", a.StartTaskHandler)
+	a.Router.HandleFunc("GET /tasks", a.GetTaskHandler)
+	a.Router.HandleFunc("DELETE /tasks/{taskID}", a.StopTaskHandler)
 }
 
 // Starts the server and invokes the initRouter ensuring the routes are established.
