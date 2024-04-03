@@ -1,6 +1,10 @@
 package worker
 
-import "github.com/c9s/goprocinfo/linux"
+import (
+	"log"
+
+	"github.com/c9s/goprocinfo/linux"
+)
 
 // Stats represents pointers to all the Linux processes information required to provide metrics about containers running on the system.
 type Stats struct {
@@ -62,4 +66,58 @@ func (s *Stats) CpuUsage() float64 {
 	}
 
 	return (float64(ttl) - float64(idleStates)/float64(ttl))
+}
+
+// GetMemoryStats is a helper function returning the /proc memory information.
+func GetMemoryStats() *linux.MemInfo {
+	memStats, err := linux.ReadMemInfo("/proc/meminfo")
+	if err != nil {
+		log.Printf("failed to read memoryinfo from /proc/meminfo")
+		return &linux.MemInfo{}
+	}
+
+	return memStats
+}
+
+// GetDiskStats is a helper function returning the /proc Disk information.
+func GetDiskStats() *linux.Disk {
+	diskStats, err := linux.ReadDisk("/")
+	if err != nil {
+		log.Printf("failed to read Disk from /")
+		return &linux.Disk{}
+	}
+
+	return diskStats
+}
+
+// GetCpuStats is a helper function returning the /proc CPU information.
+func GetCpuStats() *linux.CPUStat {
+	cpuStats, err := linux.ReadStat("/proc/stat")
+	if err != nil {
+		log.Printf("failed to read CPU stats from /proc/stat")
+		return &linux.CPUStat{}
+	}
+
+	return &cpuStats.CPUStatAll
+}
+
+// GetLoadAvg is a helper function returning the Load information.
+func GetLoadAvg() *linux.LoadAvg {
+	loadAvg, err := linux.ReadLoadAvg("/proc/loadavg")
+	if err != nil {
+		log.Println("failed to read from loadAvg from /proc/loadavg")
+		return &linux.LoadAvg{}
+	}
+
+	return loadAvg
+}
+
+// GetStats reutrns a pointer to a Stats struct, which contains all the relevant fields detailing the metrics and various status of a running Worker.
+func GetStats() *Stats {
+	return &Stats{
+		MemStats:  GetMemoryStats(),
+		CPUStats:  GetCpuStats(),
+		DiskStats: GetDiskStats(),
+		LoadStats: GetLoadAvg(),
+	}
 }
