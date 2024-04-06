@@ -23,6 +23,7 @@ type Worker struct {
 	Name  string
 	// DB represents the current actual state of the Tasks.
 	DB        map[uuid.UUID]*task.Task
+	Stats     *Stats
 	TaskCount int
 }
 
@@ -112,11 +113,6 @@ func (w *Worker) QueueTask(t task.Task) {
 	w.Queue.Enqueue(t)
 }
 
-// CollectStats collects and outputs data about the worker.
-func (w *Worker) CollectStats() {
-	fmt.Println("stats collected...")
-}
-
 // GetTasks returns a lists of Tasks within the Worker's DB.
 func (w *Worker) GetTasks() []*task.Task {
 	tasks := []*task.Task{}
@@ -124,4 +120,17 @@ func (w *Worker) GetTasks() []*task.Task {
 		tasks = append(tasks, t)
 	}
 	return tasks
+}
+
+// CollectStats runs GetStats() to maintain an up-to-date collection of stats from a Worker about the Worker and its Tasks.
+// Stats are updated once every 15 seconds.
+func (w *Worker) CollectStats() {
+	for {
+		log.Println("Collecting stats")
+		w.Stats = GetStats()
+		log.Printf("stats were: %+v\n", w.Stats)
+		w.Stats.TaskCount = w.TaskCount
+		log.Printf("taskCount was: %d\n", w.Stats.TaskCount)
+		time.Sleep(15 * time.Second)
+	}
 }

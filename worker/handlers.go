@@ -19,7 +19,7 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
 	taskEvent := task.TaskEvent{}
 	if err := data.Decode(&taskEvent); err != nil {
 		msg := fmt.Sprintf("Error unmarshalling request body : %v\n", err)
-		log.Printf(msg)
+		log.Println(msg)
 		e := ApiErrorResponse{
 			HTTPStatusCode: 400,
 			Message:        msg,
@@ -69,4 +69,14 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Task %v added to worker %s stop Queue", targetTask.ID, a.Worker.Name)
 	w.WriteHeader(204)
+}
+
+// GetStatsHandler provides the api for retrieving the current Stats from a Worker.
+// Worker stats are updated every 15 seconds.
+func (a *Api) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	if err := json.NewEncoder(w).Encode(a.Worker.Stats); err != nil {
+		fmt.Printf("failed to get stats: %s\n", err)
+	}
 }

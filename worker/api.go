@@ -24,6 +24,7 @@ func (a *Api) initRouter() {
 	a.Router.HandleFunc("POST /tasks", a.StartTaskHandler)
 	a.Router.HandleFunc("GET /tasks", a.GetTaskHandler)
 	a.Router.HandleFunc("DELETE /tasks/{taskID}", a.StopTaskHandler)
+	a.Router.HandleFunc("Get /stats", a.GetStatsHandler)
 }
 
 // Starts the server and invokes the initRouter ensuring the routes are established.

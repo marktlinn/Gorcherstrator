@@ -12,6 +12,7 @@ type Stats struct {
 	CPUStats  *linux.CPUStat
 	LoadStats *linux.LoadAvg
 	DiskStats *linux.Disk
+	TaskCount int
 }
 
 // Provides the total amount of memory in KB.
@@ -65,7 +66,7 @@ func (s *Stats) CpuUsage() float64 {
 		return 0.00
 	}
 
-	return (float64(ttl) - float64(idleStates)/float64(ttl))
+	return (float64(ttl) - float64(idleStates)) / float64(ttl)
 }
 
 // GetMemoryStats is a helper function returning the /proc memory information.
