@@ -128,7 +128,10 @@ func (w *Worker) CollectStats() {
 	for {
 		log.Println("Collecting stats")
 		w.Stats = GetStats()
-		log.Printf("stats were: %+v\n", w.Stats)
+		log.Printf("CPU stats were: %+v\n", *w.Stats.CPUStats)
+		log.Printf("Mem stats were: %+v\n", *w.Stats.MemStats)
+		log.Printf("Disk stats were: %+v\n", *w.Stats.DiskStats)
+		log.Printf("Load stats were: %+v\n", *w.Stats.LoadStats)
 		w.Stats.TaskCount = w.TaskCount
 		log.Printf("taskCount was: %d\n", w.Stats.TaskCount)
 		time.Sleep(15 * time.Second)
