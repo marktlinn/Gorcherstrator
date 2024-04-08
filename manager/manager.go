@@ -15,15 +15,31 @@ import (
 // - Scheduling Tasks on Workers.
 type Manager struct {
 	Workers       []string
-	Pending       queue.Queue
-	TaskDB        map[string][]*task.Task
+	WorkerTaskMap map[string][]uuid.UUID
+	// LastWorker represents the index of the last Worker in the Workers slice.
+	LastWorker int
+	Pending    queue.Queue
+	// TaskDB holds references to all tasks across all workers.
+	TaskDB map[string][]*task.Task
+	// EventDB holds references to all tasks' metadata.
 	EventDB       map[string][]*task.TaskEvent
 	TaskWorkerMap map[uuid.UUID]string
-	WorkerTaskMap map[string][]uuid.UUID
 }
 
-func (m *Manager) SelectWorker() {
-	fmt.Println("Selecting a Worker...")
+// SelectWorker returns a Worker at the index of Manager.LastWorker.
+// If LastWorker + 1 is less than the length of Manager.Workers, it is incremented by 1.
+// Otherwise it is reset to 0.
+func (m *Manager) SelectWorker() string {
+	var newWorker int
+	if m.LastWorker+1 < len(m.Workers) {
+		m.LastWorker++
+		newWorker = m.LastWorker
+	} else {
+		newWorker = 0
+		m.LastWorker = 0
+	}
+
+	return m.Workers[newWorker]
 }
 
 func (m *Manager) SendWork() {
