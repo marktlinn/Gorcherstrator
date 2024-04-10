@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -30,5 +31,7 @@ func (a *Api) initRouter() {
 // Starts the server and invokes the initRouter ensuring the routes are established.
 func (a *Api) Start() {
 	a.initRouter()
-	http.ListenAndServe(fmt.Sprintf("%s:%d", a.Address, a.Port), a.Router)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", a.Address, a.Port), a.Router); err != nil {
+		log.Fatalf("failed to start server:  %s", err)
+	}
 }
