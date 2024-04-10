@@ -99,6 +99,70 @@ func (m *Manager) SendWork() {
 	}
 }
 
+// UpdateTasks intermittently quiries Workers to retrieve their current state.
+// Each Worker's current state is updated in the Manager's TaskDB.
 func (m *Manager) UpdateTask() {
-	fmt.Println("Updating Task...")
+	tasks, err := collectTasks(m)
+	if err != nil {
+		log.Printf("failed to generate slice of tasks: %s\n", err)
+	}
+	if err := updateCollectedTasks(tasks, m); err != nil {
+		log.Printf("failed to update tasks in Manager: %s", err)
+	}
+}
+
+// collectTasks loops through all the tasks in the Manager's Workers.
+// It returns a reference to a slice ot all the tasks found across all Workers.
+func collectTasks(m *Manager) ([]*task.Task, error) {
+	var tasks []*task.Task
+
+	for _, worker := range m.Workers {
+		log.Printf("getting tasks from worker %v\n", worker)
+		url := fmt.Sprintf("http://%s/tasks", worker)
+		res, err := http.Get(url)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to get tasks from worker %s at url: %s; %s\n",
+				worker,
+				url,
+				err,
+			)
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to send request: %s\n", err)
+		}
+
+		data := json.NewDecoder(res.Body)
+
+		err = data.Decode(&tasks)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshall task data: %s\n", err)
+		}
+	}
+	return tasks, nil
+}
+
+// updateCollectedTasks loops through the slice of provided tasks
+// and synchronises the the state of the Task with the state of the Task
+// of matching ID in the Manager's TaskDB.
+func updateCollectedTasks(tasks []*task.Task, m *Manager) error {
+	for _, t := range tasks {
+		log.Printf("updating tasks...")
+
+		_, ok := m.TaskDB[t.ID]
+		if !ok {
+			return fmt.Errorf("failed to find task with id: %s\n", t.ID)
+		}
+
+		if m.TaskDB[t.ID].State != t.State {
+			m.TaskDB[t.ID].State = t.State
+		}
+
+		m.TaskDB[t.ID].ContainerID = t.ContainerID
+		m.TaskDB[t.ID].StartTime = t.StartTime
+		m.TaskDB[t.ID].FinishTime = t.FinishTime
+	}
+	return nil
 }
