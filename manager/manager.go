@@ -31,6 +31,28 @@ type Manager struct {
 	EventDB map[uuid.UUID]*task.TaskEvent
 }
 
+// New instantiates a new Manager and returns a pointer to the newly
+// instantiated Manager.
+func New(workers []string) *Manager {
+	taskDB := make(map[uuid.UUID]*task.Task)
+	eventDB := make(map[uuid.UUID]*task.TaskEvent)
+	taskWorkerMap := make(map[uuid.UUID]string)
+	workerTaskMap := make(map[string][]uuid.UUID)
+
+	for w := range workers {
+		workerTaskMap[workers[w]] = []uuid.UUID{}
+	}
+
+	return &Manager{
+		Workers:       workers,
+		TaskDB:        taskDB,
+		EventDB:       eventDB,
+		Pending:       *queue.New(),
+		TaskWorkerMap: taskWorkerMap,
+		WorkerTaskMap: workerTaskMap,
+	}
+}
+
 // SelectWorker returns a Worker at the index of Manager.LastWorker.
 // If LastWorker + 1 is less than the length of Manager.Workers, it is incremented by 1.
 // Otherwise it is reset to 0.
@@ -109,6 +131,11 @@ func (m *Manager) UpdateTask() {
 	if err := updateCollectedTasks(tasks, m); err != nil {
 		log.Printf("failed to update tasks in Manager: %s", err)
 	}
+}
+
+// AddTask adds Tasks to the Manager's queue.
+func (m *Manager) AddTask(te task.TaskEvent) {
+	m.Pending.Enqueue(te)
 }
 
 // collectTasks loops through all the tasks in the Manager's Workers.
