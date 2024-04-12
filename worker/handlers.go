@@ -24,21 +24,27 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
 			HTTPStatusCode: 400,
 			Message:        msg,
 		}
-		json.NewEncoder(w).Encode(e)
+		if err := json.NewEncoder(w).Encode(e); err != nil {
+			log.Printf("failed to encode response to json: %s\n", err)
+		}
 		return
 	}
 
 	a.Worker.QueueTask(taskEvent.Task)
 	log.Printf("Task %s added to worker %s task queue", taskEvent.ID, a.Worker.Name)
 	w.WriteHeader(201)
-	json.NewEncoder(w).Encode(taskEvent.Task)
+	if err := json.NewEncoder(w).Encode(taskEvent.Task); err != nil {
+		log.Printf("failed to encode response to json: %s\n", err)
+	}
 }
 
 // Handles requests to retrieve tasks from the Worker. Returns a JSON-encoded list of tasks currently managed by the worker.
 func (a *Api) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(a.Worker.GetTasks())
+	if err := json.NewEncoder(w).Encode(a.Worker.GetTasks()); err != nil {
+		log.Printf("failed to encode response to json: %s\n", err)
+	}
 }
 
 // Handles requests to stop a running task. Takes a taskID from the request path,
@@ -77,6 +83,6 @@ func (a *Api) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 	if err := json.NewEncoder(w).Encode(a.Worker.Stats); err != nil {
-		fmt.Printf("failed to get stats: %s\n", err)
+		log.Printf("failed to get stats: %s\n", err)
 	}
 }

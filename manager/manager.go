@@ -123,7 +123,7 @@ func (m *Manager) SendWork() {
 
 // UpdateTasks intermittently quiries Workers to retrieve their current state.
 // Each Worker's current state is updated in the Manager's TaskDB.
-func (m *Manager) UpdateTask() {
+func (m *Manager) UpdateTasks() {
 	tasks, err := collectTasks(m)
 	if err != nil {
 		log.Printf("failed to generate slice of tasks: %s\n", err)
@@ -135,6 +135,7 @@ func (m *Manager) UpdateTask() {
 
 // AddTask adds Tasks to the Manager's queue.
 func (m *Manager) AddTask(te task.TaskEvent) {
+	log.Printf("adding task: %+v\n", te)
 	m.Pending.Enqueue(te)
 }
 
