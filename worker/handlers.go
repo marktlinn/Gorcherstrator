@@ -10,7 +10,7 @@ import (
 	"github.com/marktlinn/Gorcherstrator/task"
 )
 
-// Handles requests to initiate a new task. Extracts task details from a JSON-encoded
+// StartTaskHandler handles requests to initiate a new task. Extracts task details from a JSON-encoded
 // 'task.TaskEvent' in the request body, adds the task to the worker queue, and returns the task information to the client.
 func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
 	data := json.NewDecoder(r.Body)
@@ -38,7 +38,7 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Handles requests to retrieve tasks from the Worker. Returns a JSON-encoded list of tasks currently managed by the worker.
+// GetTaskHandler handles requests to retrieve tasks from the Worker. Returns a JSON-encoded list of tasks currently managed by the worker.
 func (a *Api) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
