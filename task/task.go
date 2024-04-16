@@ -103,7 +103,10 @@ func (d *Docker) Run() DockerResult {
 		log.Printf("Error, unable to pull image-> %s: %v\n", d.Config.Image, err)
 		return DockerResult{Error: err}
 	}
-	io.Copy(os.Stdout, reader)
+	_, cpyErr := io.Copy(os.Stdout, reader)
+	if cpyErr != nil && cpyErr != io.EOF {
+		log.Printf("error copying reader: %s\n", cpyErr)
+	}
 
 	restartPolicy := container.RestartPolicy{
 		// todo: fix typing
@@ -148,9 +151,13 @@ func (d *Docker) Run() DockerResult {
 			ShowStdout: true,
 			ShowStderr: true,
 		})
-
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-
+	if err != nil {
+		log.Printf("error obtaining ContainerLogs: %s\n", err)
+	}
+	_, stdCpyErr := stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	if stdCpyErr != nil && stdCpyErr != io.EOF {
+		log.Printf("error copying data: %s\n", stdCpyErr)
+	}
 	return DockerResult{ContainerID: resp.ID, Action: "start", Result: "success"}
 }
 
