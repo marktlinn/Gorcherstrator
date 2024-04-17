@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/marktlinn/Gorcherstrator/task"
 )
 
@@ -52,7 +54,32 @@ func (a *Api) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 // verifies its existence, and adds a copy of the task with a 'Complete' state to
 // the Manager's queue. This signals the Manager to gracefully stop the task.
 func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO: FINISHED
+	taskID := r.PathValue("taskID")
+	if taskID == "" {
+		log.Println("No taskID received")
+		w.WriteHeader(400)
+	}
+
+	tID, _ := uuid.Parse(taskID)
+	targetTask, ok := a.Manager.TaskDB[tID]
+	if !ok {
+		log.Printf("Failed to find Task with ID: %s\n", tID)
+		w.WriteHeader(404)
+	}
+
+	taskEvent := task.TaskEvent{
+		ID:        uuid.New(),
+		State:     task.Complete,
+		Timestamp: time.Now(),
+	}
+
+	cpyTargetTask := *targetTask
+	cpyTargetTask.State = task.Complete
+	taskEvent.Task = cpyTargetTask
+	a.Manager.AddTask(taskEvent)
+
+	log.Printf("Task %v added to Manager's stop Queue", targetTask.ID)
+	w.WriteHeader(204)
 }
 
 // GetTasks is a helper function which constructs and returns a slice of
