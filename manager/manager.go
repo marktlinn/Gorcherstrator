@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -124,12 +125,33 @@ func (m *Manager) SendWork() {
 // UpdateTasks intermittently quiries Workers to retrieve their current state.
 // Each Worker's current state is updated in the Manager's TaskDB.
 func (m *Manager) UpdateTasks() {
+	var rest time.Duration = 15
+	for {
+		log.Println("checking for task updates in Workers")
+		m.updateTasks()
+		log.Printf("Tasks updated; resuming in %d seconds\n", rest)
+		time.Sleep(rest * time.Second)
+	}
+}
+
+func (m *Manager) updateTasks() {
 	tasks, err := collectTasks(m)
 	if err != nil {
 		log.Printf("failed to generate slice of tasks: %s\n", err)
 	}
 	if err := updateCollectedTasks(tasks, m); err != nil {
 		log.Printf("failed to update tasks in Manager: %s", err)
+	}
+}
+
+// ProcessTasks, at the determined interval, processes the work on the Manager's queue.
+func (m *Manager) ProcessTasks() {
+	var rest time.Duration = 10
+	for {
+		log.Println("Processing tasks in Manager queue")
+		m.SendWork()
+		log.Printf("Processing complete; resuming in %d seconds\n", rest)
+		time.Sleep(rest * time.Second)
 	}
 }
 

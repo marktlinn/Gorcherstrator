@@ -31,7 +31,7 @@ type Worker struct {
 // RunTask assess the State of the Task.
 // If a Task is not started, RunTask starts the Task.
 // Else if a Task's state is started, RunTask will stop the task.
-func (w *Worker) RunTask() task.DockerResult {
+func (w *Worker) runTask() task.DockerResult {
 	t := w.Queue.Dequeue()
 	if t == nil {
 		log.Println("Queue is empty, no tasks to process")
@@ -66,7 +66,7 @@ func (w *Worker) RunTask() task.DockerResult {
 	return result
 }
 
-// StopTask stops a Task.
+// StopTask stops a Task which is running on the Worker, gracefully.
 func (w *Worker) StopTask(t task.Task) task.DockerResult {
 	config := task.NewConfig(&t)
 	docker := task.NewDocker(config)
@@ -131,5 +131,21 @@ func (w *Worker) CollectStats() {
 		w.Stats.TaskCount = w.TaskCount
 		log.Printf("taskCount was: %d\n", w.Stats.TaskCount)
 		time.Sleep(15 * time.Second)
+	}
+}
+
+// RunTasks
+func (w *Worker) RunTasks() {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.runTask()
+			if result.Error != nil {
+				log.Printf("Error running task: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("No tasks to process currently.\n")
+		}
+		log.Println("Sleeping for 10 seconds.")
+		time.Sleep(10 * time.Second)
 	}
 }

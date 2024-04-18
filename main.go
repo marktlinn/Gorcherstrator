@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/marktlinn/Gorcherstrator/manager"
 	"github.com/marktlinn/Gorcherstrator/task"
@@ -16,8 +14,11 @@ import (
 )
 
 func main() {
-	host := os.Getenv("GORCH_HOST")
-	port, _ := strconv.Atoi(os.Getenv("GORCH_PORT"))
+	wHost := os.Getenv("WORKER_HOST")
+	wPort, _ := strconv.Atoi(os.Getenv("WORKER_PORT"))
+
+	mHost := os.Getenv("MANAGER_HOST")
+	mPort, _ := strconv.Atoi(os.Getenv("MANAGER_PORT"))
 
 	fmt.Println("Starting Worker")
 
@@ -25,59 +26,19 @@ func main() {
 		Queue: *queue.New(),
 		DB:    make(map[uuid.UUID]*task.Task),
 	}
-	api := worker.Api{Address: host, Port: port, Worker: &w}
+	workerApi := worker.Api{Address: wHost, Port: wPort, Worker: &w}
 
-	go runTasks(&w)
+	go w.RunTasks()
 	go w.CollectStats()
-	go api.Start()
+	go workerApi.Start()
 
-	workers := []string{fmt.Sprintf("%s:%d", host, port)}
+	workers := []string{fmt.Sprintf("%s:%d", wHost, wPort)}
+
 	m := manager.New(workers)
+	managerApi := manager.Api{Address: mHost, Port: mPort, Manager: m}
 
-	// temporary tasks to demo assigning tasks to Manager.
-	for i := 0; i < 3; i++ {
-		t := task.Task{
-			ID:    uuid.New(),
-			State: task.Scheduled,
-			Name:  fmt.Sprintf("test-container-%d", i),
-			Image: "strm/helloworld-http",
-		}
-		te := task.TaskEvent{
-			ID:    uuid.New(),
-			Task:  t,
-			State: task.Running,
-		}
-		log.Printf("task no %d created\n", i)
-		m.AddTask(te)
-		m.SendWork()
-	}
+	go m.ProcessTasks()
+	go m.UpdateTasks()
 
-	go func() {
-		for {
-			fmt.Printf("Manager updating tasks on %d Workers", len(m.Workers))
-			m.UpdateTasks()
-			time.Sleep(15 * time.Second)
-		}
-	}()
-	for {
-		for _, t := range m.TaskDB {
-			fmt.Printf("Manager's task %d, State: %d", t.ID, t.State)
-			time.Sleep(15 * time.Second)
-		}
-	}
-}
-
-func runTasks(w *worker.Worker) {
-	for {
-		if w.Queue.Len() != 0 {
-			result := w.RunTask()
-			if result.Error != nil {
-				log.Printf("Error running task: %v\n", result.Error)
-			}
-		} else {
-			log.Printf("No tasks to process currently.\n")
-		}
-		log.Println("Sleeping for 10 seconds.")
-		time.Sleep(10 * time.Second)
-	}
+	managerApi.Start()
 }
