@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	imageTypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -92,6 +93,12 @@ type DockerResult struct {
 	Action      string
 	Result      string
 	Error       error
+}
+
+// DockerInspectResponse provides insight into the State of a running Docker container.
+type DockerInspectResponse struct {
+	Container *types.ContainerJSON
+	Error     error
 }
 
 func (d *Docker) Run() DockerResult {
@@ -181,4 +188,16 @@ func (d *Docker) Stop(id string) DockerResult {
 	}
 
 	return DockerResult{Action: "stop", Result: "success", Error: nil}
+}
+
+// Inspect runs and returns the result of a Docker container inspection on the given containerID, giving insight into the current state of the given container.
+func (d *Docker) Inspect(containerID string) DockerInspectResponse {
+	dc, _ := client.NewClientWithOpts(client.FromEnv)
+	ctx := context.Background()
+	res, err := dc.ContainerInspect(ctx, containerID)
+	if err != nil {
+		log.Printf("failed to inspect container: %s\n", err)
+	}
+
+	return DockerInspectResponse{Container: &res}
 }
