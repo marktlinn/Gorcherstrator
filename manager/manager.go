@@ -212,11 +212,11 @@ func (m *Manager) runHealthCheck() {
 	for _, t := range m.GetTasks() {
 		if t.State == task.Running && t.RestartCount < 3 {
 			if err := m.healthCheckTask(*t); err != nil {
-				// TODO: m.restartTask(t)
+				m.restartTask(t)
 				return
 			}
 			if t.State == task.Failed {
-				// TODO:  m.restartTask(t)
+				m.restartTask(t)
 			}
 		}
 	}
