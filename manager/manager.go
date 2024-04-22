@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 	"github.com/marktlinn/Gorcherstrator/task"
@@ -192,6 +194,40 @@ func collectTasks(m *Manager) ([]*task.Task, error) {
 		}
 	}
 	return tasks, nil
+}
+
+// healthCheckTask pulls the IP address and port of the target Task from TaskWorkerMap. It then pings the selected Task's HealthCheck endpoint.
+func (m *Manager) healthCheckTask(t task.Task) error {
+	log.Printf("Performing HealtCheck on Task %s\n", t)
+
+	wTask := m.TaskWorkerMap[t.ID]
+	hostPort := getHostPort(t.ExposedPorts)
+	wrkr := strings.Split(wTask, ":")
+	url := fmt.Sprintf("http://%s:%s%s", wrkr[0], *hostPort, t.HealthCheck)
+
+	res, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to connect for healthcheck on task %s: %w", t.ID, err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf(
+			"failed HealthCheck on task %s, with StatusCode %d\n",
+			t.ID,
+			res.StatusCode,
+		)
+	}
+
+	log.Printf("HealthCheck for task %s complete successfully\n", t.ID)
+	return nil
+}
+
+// getPorts is a auxiliary function to retrieve the a HostPort from a selected Task.
+func getHostPort(ports nat.PortMap) *string {
+	for k := range ports {
+		return &ports[k][0].HostPort
+	}
+	return nil
 }
 
 // updateCollectedTasks loops through the slice of provided tasks

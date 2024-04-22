@@ -34,6 +34,8 @@ type Task struct {
 	portBindings  map[string]string
 	StartTime     time.Time
 	FinishTime    time.Time
+	HealthCheck   string
+	Restartcount  int
 }
 
 type TaskEvent struct {
