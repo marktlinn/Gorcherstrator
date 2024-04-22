@@ -35,7 +35,7 @@ type Task struct {
 	StartTime     time.Time
 	FinishTime    time.Time
 	HealthCheck   string
-	Restartcount  int
+	RestartCount  int
 }
 
 type TaskEvent struct {

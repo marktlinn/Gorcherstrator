@@ -196,6 +196,32 @@ func collectTasks(m *Manager) ([]*task.Task, error) {
 	return tasks, nil
 }
 
+func (m *Manager) RunHealthChecks() {
+	var rest time.Duration = 60
+	for {
+		m.runHealthCheck()
+		log.Printf("HealthChecks complete, next cycle will start in %d seconds.\n", rest)
+		time.Sleep(rest * time.Second)
+	}
+}
+
+// runHealthCheck loops over all Tasks on the Worker performing HealthChecks.
+// If a task is not in a `Running` state and its RestartCount is less that 3,
+// and attempt will be made to restarted it. Else the Task's State will be set to False to indicate it has failed.
+func (m *Manager) runHealthCheck() {
+	for _, t := range m.GetTasks() {
+		if t.State == task.Running && t.RestartCount < 3 {
+			if err := m.healthCheckTask(*t); err != nil {
+				// TODO: m.restartTask(t)
+				return
+			}
+			if t.State == task.Failed {
+				// TODO:  m.restartTask(t)
+			}
+		}
+	}
+}
+
 // healthCheckTask pulls the IP address and port of the target Task from TaskWorkerMap. It then pings the selected Task's HealthCheck endpoint.
 func (m *Manager) healthCheckTask(t task.Task) error {
 	log.Printf("Performing HealtCheck on Task %s\n", t)
@@ -228,6 +254,62 @@ func getHostPort(ports nat.PortMap) *string {
 		return &ports[k][0].HostPort
 	}
 	return nil
+}
+
+// restartTasks targets the give task and attempts to restart it, outputting logs for any errors that occur while attempting the restart.
+func (m *Manager) restartTask(t *task.Task) {
+	wTask := m.TaskWorkerMap[t.ID]
+	t.State = task.Scheduled
+	t.RestartCount++
+
+	m.TaskDB[t.ID] = t
+
+	taskEvent := task.TaskEvent{
+		ID:        uuid.New(),
+		Task:      *t,
+		State:     task.Running,
+		Timestamp: time.Now(),
+	}
+
+	data, err := json.Marshal(taskEvent)
+	if err != nil {
+		log.Printf("failed to marshal taskEvent data: %+v\n", taskEvent)
+	}
+
+	url := fmt.Sprintf("http://%s/tasks", wTask)
+	res, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		m.Pending.Enqueue(t)
+		log.Printf(
+			"failed to connect to Worker for task: %s, requeuing task; err: %s\n",
+			wTask,
+			err,
+		)
+		return
+	}
+
+	d := json.NewDecoder(res.Body)
+	if res.StatusCode != http.StatusCreated {
+		e := worker.ApiErrorResponse{}
+		err := d.Decode(&e)
+		if err != nil {
+			fmt.Printf("failed to decode response %s\n", err.Error())
+			return
+		}
+		log.Printf(
+			"failed to create task, unexpected HTTP Status %s received: %s\n",
+			res.StatusCode,
+			err,
+		)
+
+		return
+	}
+
+	newTask := task.Task{}
+	err = d.Decode(&newTask)
+	if err != nil {
+		fmt.Printf("failed to decode New Task %+v: %s\n", newTask, err)
+	}
 }
 
 // updateCollectedTasks loops through the slice of provided tasks
