@@ -196,6 +196,9 @@ func collectTasks(m *Manager) ([]*task.Task, error) {
 	return tasks, nil
 }
 
+// RunHealthChecks ensures running tasks are pinged at a setinterval to ensure they are running correctly.
+// A task found to be in any State other than `Running` will be restarted.
+// Tasks that repeatedly fail (3 or more times) will be set to a `failed` state.
 func (m *Manager) RunHealthChecks() {
 	var rest time.Duration = 60
 	for {
