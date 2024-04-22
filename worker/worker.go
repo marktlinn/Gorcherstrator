@@ -86,12 +86,12 @@ func (w *Worker) RunTasks() {
 	}
 }
 
-// UpdateTasks runs recursively through the Worker to determine if a Task's state is `running` or else `failed`.
+// UpdateTasks runs recursively through the Worker to determine if a Task's state is `running` or else `failed`
 func (w *Worker) UpdateTasks() {
 	var rest time.Duration = 15
 	for {
 		log.Printf("Updating task status on Worker %s\n", w.Name)
-		w.UpdateTasks()
+		w.updateTasks()
 		log.Printf("Tasks updated for Worker %s; sleeping for %d\n", w.Name, rest)
 		time.Sleep(rest * time.Second)
 	}
@@ -105,7 +105,7 @@ func (w *Worker) updateTasks() {
 			res := w.InspectTask(*t)
 			if res.Error != nil {
 				log.Printf(
-					"failed to inspect task %s in docker container: %w",
+					"failed to inspect task %s in docker container: %s\n",
 					id,
 					res.Error,
 				)
@@ -129,7 +129,7 @@ func (w *Worker) updateTasks() {
 				w.DB[id].State = task.Failed
 			}
 
-			w.DB[id].ExposedPorts = res.Container.NetworkSettings.NetworkSettingsBase.Ports
+			w.DB[id].HostPorts = res.Container.NetworkSettings.NetworkSettingsBase.Ports
 		}
 	}
 }

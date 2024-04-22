@@ -30,6 +30,7 @@ func main() {
 
 	go w.RunTasks()
 	go w.CollectStats()
+	go w.UpdateTasks()
 	go workerApi.Start()
 
 	workers := []string{fmt.Sprintf("%s:%d", wHost, wPort)}
@@ -39,6 +40,7 @@ func main() {
 
 	go m.ProcessTasks()
 	go m.UpdateTasks()
+	go m.RunHealthChecks()
 
 	managerApi.Start()
 }

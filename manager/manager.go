@@ -227,10 +227,13 @@ func (m *Manager) runHealthCheck() {
 
 // healthCheckTask pulls the IP address and port of the target Task from TaskWorkerMap. It then pings the selected Task's HealthCheck endpoint.
 func (m *Manager) healthCheckTask(t task.Task) error {
-	log.Printf("Performing HealtCheck on Task %s\n", t)
+	log.Printf("Performing HealtCheck on Task %+v\n", t)
 
 	wTask := m.TaskWorkerMap[t.ID]
-	hostPort := getHostPort(t.ExposedPorts)
+	hostPort := getHostPort(t.HostPorts)
+	if hostPort == nil {
+		return fmt.Errorf("hostPort is nil")
+	}
 	wrkr := strings.Split(wTask, ":")
 	url := fmt.Sprintf("http://%s:%s%s", wrkr[0], *hostPort, t.HealthCheck)
 
@@ -300,7 +303,7 @@ func (m *Manager) restartTask(t *task.Task) {
 			return
 		}
 		log.Printf(
-			"failed to create task, unexpected HTTP Status %s received: %s\n",
+			"failed to create task, unexpected HTTP Status %d received: %s\n",
 			res.StatusCode,
 			err,
 		)
