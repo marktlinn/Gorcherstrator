@@ -19,13 +19,19 @@ type Scheduler interface {
 	Pick(scores map[string]float64, candidates []*node.Node) *node.Node
 }
 
+const (
+	GREEDY      string = "greedy"
+	ROUND_ROBIN string = "roundrobin"
+	EVPM        string = "epvm"
+)
+
 func SetSchedulerType(schedulerType string) Scheduler {
 	switch schedulerType {
-	case "greedy":
-		return &Greedy{Name: "greedy"}
-	case "roundrobin":
-		return &RoundRobin{Name: "roundrobin"}
+	case GREEDY:
+		return &Greedy{Name: GREEDY}
+	case ROUND_ROBIN:
+		return &RoundRobin{Name: ROUND_ROBIN}
 	default:
-		return &Epvm{Name: "epvm"}
+		return &Epvm{Name: EVPM}
 	}
 }
