@@ -94,17 +94,29 @@ func (m *Manager) SendWork() {
 
 	t := m.Pending.Dequeue()
 	taskEvent := t.(task.TaskEvent)
-	tsk := taskEvent.Task
 
+	m.EventDB[taskEvent.ID] = &taskEvent
+
+	taskWorker, ok := m.TaskWorkerMap[taskEvent.Task.ID]
+	if ok {
+		persistedTask := m.TaskDB[taskEvent.Task.ID]
+		if taskEvent.State == task.Complete &&
+			task.ValidStateTransition(persistedTask.State, taskEvent.State) {
+			m.stopTask(taskWorker, taskEvent.Task.ID.String())
+			return
+		}
+	}
+
+	tsk := taskEvent.Task
 	w, err := m.SelectWorker(tsk)
 	if err != nil {
-		log.Printf("failed to select Worker for task %s\n", taskEvent.ID)
+		log.Printf("failed to select Worker for task %s: %s\n", taskEvent.ID, err)
+		return
 	}
 	m.WorkerTaskMap[w.Name] = append(m.WorkerTaskMap[w.Name], taskEvent.Task.ID)
 	m.TaskWorkerMap[tsk.ID] = w.Name
 
 	tsk.State = task.Scheduled
-	m.TaskDB[tsk.ID] = &tsk
 
 	data, err := json.Marshal(taskEvent)
 	if err != nil {
@@ -159,6 +171,29 @@ func (m *Manager) updateTasks() {
 	if err := updateCollectedTasks(tasks, m); err != nil {
 		log.Printf("failed to update tasks in Manager: %s", err)
 	}
+}
+
+// stopTask is a helper function helping connect to the correct Worker where a Task is running and scheduling for that Task to be gracefully terminated.
+func (m *Manager) stopTask(worker, taskID string) {
+	client := &http.Client{}
+	url := fmt.Sprintf("http://%s/tasks/%s", worker, taskID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		log.Printf("failed to create deletion request for task %s\n", taskID)
+		return
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("failed to connect to Worker %s at %s\n", worker, url)
+	}
+
+	if res.StatusCode != 204 {
+		log.Printf("failed to send request: %s\n", err)
+		return
+	}
+
+	log.Printf("task %s successfully scheduled to be stopped\n", taskID)
 }
 
 // ProcessTasks, at the determined interval, processes the work on the Manager's queue.
