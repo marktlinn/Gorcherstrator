@@ -3,6 +3,7 @@ package manager
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	"github.com/marktlinn/Gorcherstrator/node"
+	"github.com/marktlinn/Gorcherstrator/scheduler"
 	"github.com/marktlinn/Gorcherstrator/task"
 	"github.com/marktlinn/Gorcherstrator/worker"
 )
@@ -32,20 +35,30 @@ type Manager struct {
 	TaskDB map[uuid.UUID]*task.Task
 	// EventDB holds references to all tasks' metadata.
 	EventDB map[uuid.UUID]*task.TaskEvent
+	// A slice of worker nodes.
+	WorkerNodes []*node.Node
+	// The Scheduler type to be used for scheduling Tasks.
+	Scheduler scheduler.Scheduler
 }
 
 // New instantiates a new Manager and returns a pointer to the newly
 // instantiated Manager.
-func New(workers []string) *Manager {
+func New(workers []string, schedulerType string) *Manager {
 	taskDB := make(map[uuid.UUID]*task.Task)
 	eventDB := make(map[uuid.UUID]*task.TaskEvent)
 	taskWorkerMap := make(map[uuid.UUID]string)
 	workerTaskMap := make(map[string][]uuid.UUID)
 
+	var nodes []*node.Node
 	for w := range workers {
 		workerTaskMap[workers[w]] = []uuid.UUID{}
+
+		nodeApi := fmt.Sprintf("http://%v", workers[w])
+		newNode := node.NewNode(workers[w], nodeApi, "worker")
+		nodes = append(nodes, newNode)
 	}
 
+	s := scheduler.SetSchedulerType(schedulerType)
 	return &Manager{
 		Workers:       workers,
 		TaskDB:        taskDB,
@@ -53,40 +66,42 @@ func New(workers []string) *Manager {
 		Pending:       *queue.New(),
 		TaskWorkerMap: taskWorkerMap,
 		WorkerTaskMap: workerTaskMap,
+		Scheduler:     s,
+		WorkerNodes:   nodes,
 	}
 }
 
-// SelectWorker returns a Worker at the index of Manager.LastWorker.
-// If LastWorker + 1 is less than the length of Manager.Workers, it is incremented by 1.
-// Otherwise it is reset to 0.
-func (m *Manager) SelectWorker() string {
-	var newWorker int
-	if m.LastWorker+1 < len(m.Workers) {
-		m.LastWorker++
-		newWorker = m.LastWorker
-	} else {
-		newWorker = 0
-		m.LastWorker = 0
+// SelectWorker makes use of the Scheduler interface to to nominate an appropriate Worker to receive a Task. If no Worker is found, or no appropriate candidates are given an error is returned.
+func (m *Manager) SelectWorker(t task.Task) (*node.Node, error) {
+	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerNodes)
+	if candidates == nil {
+		errMsg := fmt.Sprintf("failed to find available candidates for task %s\n", t.ID)
+		return nil, errors.New(errMsg)
 	}
 
-	return m.Workers[newWorker]
+	nodeScores := m.Scheduler.Score(t, candidates)
+	selectedNode := m.Scheduler.Pick(nodeScores, candidates)
+
+	return selectedNode, nil
 }
 
-// SendWork organised the distribution of tasks amongst the Workers and updated the state of the Task.
+// SendWork organises the distribution of Tasks amongst the Workers and updates the state of the Task.
 func (m *Manager) SendWork() {
 	if m.Pending.Len() <= 0 {
 		log.Println("Queue is empty, no Tasks to process.")
 		return
 	}
-	w := m.SelectWorker()
 
 	t := m.Pending.Dequeue()
 	taskEvent := t.(task.TaskEvent)
 	tsk := taskEvent.Task
 
-	m.EventDB[taskEvent.ID] = &taskEvent
-	m.WorkerTaskMap[w] = append(m.WorkerTaskMap[w], taskEvent.Task.ID)
-	m.TaskWorkerMap[tsk.ID] = w
+	w, err := m.SelectWorker(tsk)
+	if err != nil {
+		log.Printf("failed to select Worker for task %s\n", taskEvent.ID)
+	}
+	m.WorkerTaskMap[w.Name] = append(m.WorkerTaskMap[w.Name], taskEvent.Task.ID)
+	m.TaskWorkerMap[tsk.ID] = w.Name
 
 	tsk.State = task.Scheduled
 	m.TaskDB[tsk.ID] = &tsk
@@ -96,7 +111,7 @@ func (m *Manager) SendWork() {
 		log.Printf("failed to marshal task %+v\n", taskEvent)
 	}
 
-	url := fmt.Sprintf("http://%s/tasks", w)
+	url := fmt.Sprintf("http://%s/tasks", w.Name)
 	res, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("failed to connect %s; %s\n", url, err)

@@ -18,3 +18,14 @@ type Scheduler interface {
 	// Pick is responsible for taking the given candidate node list and their scores and selecting the one with the best score to run the Task.
 	Pick(scores map[string]float64, candidates []*node.Node) *node.Node
 }
+
+func SetSchedulerType(schedulerType string) Scheduler {
+	switch schedulerType {
+	case "greedy":
+		return &Greedy{Name: "greedy"}
+	case "roundrobin":
+		return &RoundRobin{Name: "roundrobin"}
+	default:
+		return &Epvm{Name: "epvm"}
+	}
+}

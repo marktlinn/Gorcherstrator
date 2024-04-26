@@ -11,4 +11,14 @@ type Node struct {
 	DiskAllocated   int
 	Role            string
 	TaskCount       int
+	Api             string
+}
+
+// NewNode returns a reference to a new Node entity.
+func NewNode(name, api, role string) *Node {
+	return &Node{
+		Name: name,
+		Api:  api,
+		Role: role,
+	}
 }
