@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	"github.com/marktlinn/Gorcherstrator/stats"
 	"github.com/marktlinn/Gorcherstrator/task"
 )
 
@@ -23,7 +24,7 @@ type Worker struct {
 	Name  string
 	// DB represents the current actual state of the Tasks.
 	DB        map[uuid.UUID]*task.Task
-	Stats     *Stats
+	Stats     *stats.Stats
 	TaskCount int
 }
 
@@ -160,7 +161,7 @@ func (w *Worker) GetTasks() []*task.Task {
 func (w *Worker) CollectStats() {
 	for {
 		log.Println("Collecting stats")
-		w.Stats = GetStats()
+		w.Stats = stats.GetStats()
 		w.Stats.TaskCount = w.TaskCount
 		log.Printf("taskCount was: %d\n", w.Stats.TaskCount)
 		time.Sleep(15 * time.Second)

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/marktlinn/Gorcherstrator/manager"
+	"github.com/marktlinn/Gorcherstrator/scheduler"
 	"github.com/marktlinn/Gorcherstrator/task"
 	"github.com/marktlinn/Gorcherstrator/worker"
 
@@ -22,20 +23,45 @@ func main() {
 
 	fmt.Println("Starting Worker")
 
-	w := worker.Worker{
+	w1 := worker.Worker{
 		Queue: *queue.New(),
 		DB:    make(map[uuid.UUID]*task.Task),
 	}
-	workerApi := worker.Api{Address: wHost, Port: wPort, Worker: &w}
+	workerApi := worker.Api{Address: wHost, Port: wPort, Worker: &w1}
+	w2 := worker.Worker{
+		Queue: *queue.New(),
+		DB:    make(map[uuid.UUID]*task.Task),
+	}
+	workerApi2 := worker.Api{Address: wHost, Port: wPort + 1, Worker: &w2}
 
-	go w.RunTasks()
-	go w.CollectStats()
-	go w.UpdateTasks()
+	w3 := worker.Worker{
+		Queue: *queue.New(),
+		DB:    make(map[uuid.UUID]*task.Task),
+	}
+	workerApi3 := worker.Api{Address: wHost, Port: wPort + 2, Worker: &w3}
+
+	go w1.RunTasks()
+	go w1.CollectStats()
+	go w1.UpdateTasks()
 	go workerApi.Start()
 
-	workers := []string{fmt.Sprintf("%s:%d", wHost, wPort)}
+	go w2.RunTasks()
+	go w2.CollectStats()
+	go w2.UpdateTasks()
+	go workerApi2.Start()
 
-	m := manager.New(workers)
+	go w3.RunTasks()
+	go w3.CollectStats()
+	go w3.UpdateTasks()
+	go workerApi3.Start()
+
+	workers := []string{
+		fmt.Sprintf("%s:%d", wHost, wPort),
+		fmt.Sprintf("%s:%d", wHost, wPort+1),
+		fmt.Sprintf("%s:%d", wHost, wPort+2),
+	}
+
+	m := manager.New(workers, scheduler.ROUND_ROBIN)
 	managerApi := manager.Api{Address: mHost, Port: mPort, Manager: m}
 
 	go m.ProcessTasks()

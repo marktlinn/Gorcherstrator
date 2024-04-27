@@ -1,8 +1,15 @@
 package scheduler
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+
 	"github.com/marktlinn/Gorcherstrator/node"
 	"github.com/marktlinn/Gorcherstrator/task"
+	"google.golang.org/grpc/benchmark/stats"
 )
 
 // Scheduler determines how to distrubute the workloads/Tasks to Workers.
@@ -34,4 +41,40 @@ func SetSchedulerType(schedulerType string) Scheduler {
 	default:
 		return &Epvm{Name: EVPM}
 	}
+}
+
+func checkDisk(t task.Task, diskAvailable int64) bool {
+	return t.Disk <= diskAvailable
+}
+
+func calculateLoad(usage, capacity float64) float64 {
+	return usage / capacity
+}
+
+func calculateCpuUsage(node *node.Node) (*float64, error) {
+	// TODO:
+	return nil, nil
+}
+
+func getNodeStats(node *node.Node) *stats.Stats {
+	url := fmt.Sprintf("%s/stats", node.Api)
+	res, err := http.Get(url)
+	if err != nil {
+		log.Printf("failed to connect to %s: %s\n", node.Api, err)
+	}
+
+	if res.StatusCode != 200 {
+		log.Printf(
+			"failed to retrieve stats from node: %s; response StatusCode: %d\n",
+			node.Api,
+			res.StatusCode,
+		)
+	}
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	var status stats.Stats
+	json.Unmarshal(body, &status)
+	return &status
 }

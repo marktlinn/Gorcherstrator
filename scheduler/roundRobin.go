@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"log"
+
 	"github.com/marktlinn/Gorcherstrator/node"
 	"github.com/marktlinn/Gorcherstrator/task"
 )
@@ -13,12 +15,14 @@ type RoundRobin struct {
 
 // SelectCandidateNodes simply returns the nodes that it receives, this implementation is implemented to meet the contract of the Scheduler's interface.
 func (r *RoundRobin) SelectCandidateNodes(t task.Task, nodes []*node.Node) []*node.Node {
+	log.Println("Selecting Round Robin Nodes")
 	return nodes
 }
 
 // Score ensures iteration through the nodes in equal order. It iterates over the nodes and ensure the next node on from the previously assign Worker node is scored ready for a Task.
 func (r *RoundRobin) Score(t task.Task, nodes []*node.Node) map[string]float64 {
 	nodesScores := make(map[string]float64)
+	log.Println("Scoring Round Robin")
 
 	var nextWorker int
 	if r.LastWorker+1 < len(nodes) {
@@ -45,6 +49,7 @@ func (r *RoundRobin) Pick(scores map[string]float64, candidates []*node.Node) *n
 	var topScoringNode *node.Node
 	var lowestScore float64
 
+	log.Println("Picking Round Robin")
 	for i, node := range candidates {
 		if i == 0 {
 			topScoringNode = node
