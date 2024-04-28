@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"log"
 	"math"
 
 	"github.com/marktlinn/Gorcherstrator/node"
@@ -32,7 +33,10 @@ func (g *Epvm) Score(t task.Task, nodes []*node.Node) map[string]float64 {
 	maxJobs := 4.0
 
 	for _, node := range nodes {
-		cpuUsage, _ := calculateCpuUsage(node)
+		cpuUsage, err := calculateCpuUsage(node)
+		if err != nil {
+			log.Printf("failed to calculateCpuUsage on Node %s: %s\n", node.Name, err)
+		}
 		cpuLoad := calculateLoad(*cpuUsage, math.Pow(2, 0.8))
 
 		memAllocated := float64(node.Stats.MemUsedKB()) + float64(node.MemoryAllocated)

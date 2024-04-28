@@ -1,15 +1,9 @@
 package scheduler
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"time"
 
 	"github.com/marktlinn/Gorcherstrator/node"
-	"github.com/marktlinn/Gorcherstrator/stats"
 	"github.com/marktlinn/Gorcherstrator/task"
 )
 
@@ -56,9 +50,16 @@ func calculateLoad(usage, capacity float64) float64 {
 
 // calculateCpuUsage is a helper function that determines the CPU usage of the Linux system running Tasks.
 func calculateCpuUsage(node *node.Node) (*float64, error) {
-	stat1 := getNodeStats(node)
+	stat1, err := node.GetStats()
+	if err != nil {
+		return nil, err
+	}
+
 	time.Sleep(3 * time.Second)
-	stat2 := getNodeStats(node)
+	stat2, err := node.GetStats()
+	if err != nil {
+		return nil, err
+	}
 
 	stat1Idle := stat1.CPUStats.User + stat1.CPUStats.IOWait
 	stat2Idle := stat2.CPUStats.User + stat2.CPUStats.IOWait
@@ -78,30 +79,4 @@ func calculateCpuUsage(node *node.Node) (*float64, error) {
 		cpuPercentUsage = (float64(ttl) - float64(ttlIdle)) / float64(ttl)
 	}
 	return &cpuPercentUsage, nil
-}
-
-// getNodeStats is a helper function that makes the requests to the Node's "/stats/" endpoint to retrieve the stats from the Node.
-func getNodeStats(node *node.Node) *stats.Stats {
-	url := fmt.Sprintf("%s/stats", node.Api)
-	res, err := http.Get(url)
-	if err != nil {
-		log.Printf("failed to connect to %s: %s\n", node.Api, err)
-	}
-
-	if res.StatusCode != 200 {
-		log.Printf(
-			"failed to retrieve stats from node: %s; response StatusCode: %d\n",
-			node.Api,
-			res.StatusCode,
-		)
-	}
-
-	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
-
-	var status stats.Stats
-	if err := json.Unmarshal(body, &status); err != nil {
-		log.Printf("failed to unmarshal JSON data into Status object: %s\n", err)
-	}
-	return &status
 }
