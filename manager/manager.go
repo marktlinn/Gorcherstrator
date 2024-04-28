@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -239,7 +240,7 @@ func collectTasks(m *Manager) ([]*task.Task, error) {
 		data := json.NewDecoder(res.Body)
 
 		err = data.Decode(&tasks)
-		if err != nil {
+		if err != nil && errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("failed to unmarshall task data: %s\n", err)
 		}
 	}

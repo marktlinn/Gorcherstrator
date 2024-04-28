@@ -59,13 +59,21 @@ func (n *Node) GetStats() (*stats.Stats, error) {
 
 	var status stats.Stats
 	err = json.Unmarshal(body, &status)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to unmarshal JSON data into Status object: %s\n", err)
+	if err != nil && !errors.Is(err, io.EOF) {
+		errMsg := fmt.Sprintf(
+			"failed to unmarshal JSON data into Status object: %s\n",
+			err,
+		)
 		return nil, errors.New(errMsg)
+	}
+
+	if status.MemStats == nil || status.DiskStats == nil {
+		return nil, fmt.Errorf("error getting stats from node %s", n.Name)
 	}
 
 	n.Disk = int64(status.DiskTotal())
 	n.Memory = int64(status.MemTotalKB())
+	n.Stats = status
 
-	return &status, nil
+	return &n.Stats, nil
 }

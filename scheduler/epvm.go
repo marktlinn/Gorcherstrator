@@ -31,14 +31,16 @@ func (g *Epvm) Score(t task.Task, nodes []*node.Node) map[string]float64 {
 
 	nodesScores := make(map[string]float64)
 	maxJobs := 4.0
-
 	for _, node := range nodes {
 		cpuUsage, err := calculateCpuUsage(node)
 		if err != nil {
-			log.Printf("failed to calculateCpuUsage on Node %s: %s\n", node.Name, err)
+			log.Printf("failed to calculateCpuUsage on Node %+v: %s\n", node, err)
+			continue
 		}
 		cpuLoad := calculateLoad(*cpuUsage, math.Pow(2, 0.8))
 
+		log.Printf("Node is %+v\n", node)
+		log.Printf("Node Stats are %+v\n", node.Stats)
 		memAllocated := float64(node.Stats.MemUsedKB()) + float64(node.MemoryAllocated)
 		memPercentAllocated := memAllocated / float64(node.Memory)
 		newMemPercent := (calculateLoad(memAllocated*float64(t.Memory/1000), float64(node.Memory)))

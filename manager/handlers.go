@@ -2,7 +2,9 @@ package manager
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -19,7 +21,7 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	taskEvent := task.TaskEvent{}
-	if err := data.Decode(&taskEvent); err != nil {
+	if err := data.Decode(&taskEvent); err != nil && !errors.Is(err, io.EOF) {
 		errMsg := fmt.Sprintf("failed to unmarshall json body data %s\n", err)
 		log.Println(errMsg)
 		w.WriteHeader(400)

@@ -22,19 +22,18 @@ type Scheduler interface {
 }
 
 const (
-	GREEDY      string = "greedy"
 	ROUND_ROBIN string = "roundrobin"
-	EVPM        string = "epvm"
+	EPVM        string = "epvm"
 )
 
 func SetSchedulerType(schedulerType string) Scheduler {
 	switch schedulerType {
-	case GREEDY:
-		return &Greedy{Name: GREEDY}
 	case ROUND_ROBIN:
 		return &RoundRobin{Name: ROUND_ROBIN}
+	case EPVM:
+		return &Epvm{Name: EPVM}
 	default:
-		return &Epvm{Name: EVPM}
+		return &RoundRobin{Name: ROUND_ROBIN}
 	}
 }
 
