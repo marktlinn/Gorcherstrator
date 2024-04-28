@@ -61,7 +61,7 @@ func main() {
 		fmt.Sprintf("%s:%d", wHost, wPort+2),
 	}
 
-	m := manager.New(workers, scheduler.ROUND_ROBIN)
+	m := manager.New(workers, scheduler.EPVM)
 	managerApi := manager.Api{Address: mHost, Port: mPort, Manager: m}
 
 	go m.ProcessTasks()
