@@ -6,10 +6,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/marktlinn/Gorcherstrator/node"
+	"github.com/marktlinn/Gorcherstrator/stats"
 	"github.com/marktlinn/Gorcherstrator/task"
-	"google.golang.org/grpc/benchmark/stats"
 )
 
 // Scheduler determines how to distrubute the workloads/Tasks to Workers.
@@ -43,19 +44,43 @@ func SetSchedulerType(schedulerType string) Scheduler {
 	}
 }
 
+// checkDisk is a simple helper function to determine if the Task's disk requirements are less than is available for a Node.
 func checkDisk(t task.Task, diskAvailable int64) bool {
 	return t.Disk <= diskAvailable
 }
 
+// calculateLoad is a simple helper function determining the CPU load.
 func calculateLoad(usage, capacity float64) float64 {
 	return usage / capacity
 }
 
+// calculateCpuUsage is a helper function that determines the CPU usage of the Linux system running Tasks.
 func calculateCpuUsage(node *node.Node) (*float64, error) {
-	// TODO:
-	return nil, nil
+	stat1 := getNodeStats(node)
+	time.Sleep(3 * time.Second)
+	stat2 := getNodeStats(node)
+
+	stat1Idle := stat1.CPUStats.User + stat1.CPUStats.IOWait
+	stat2Idle := stat2.CPUStats.User + stat2.CPUStats.IOWait
+	stat1NonIdle := stat1.CPUStats.User + stat1.CPUStats.Nice + stat1.CPUStats.System + stat1.CPUStats.IRQ + stat1.CPUStats.SoftIRQ + stat1.CPUStats.Steal
+	stat2NonIdle := stat2.CPUStats.User + stat2.CPUStats.Nice + stat2.CPUStats.System + stat2.CPUStats.IRQ + stat2.CPUStats.SoftIRQ + stat2.CPUStats.Steal
+
+	stat1Total := stat1Idle + stat1NonIdle
+	stat2Total := stat2Idle + stat2NonIdle
+
+	ttl := stat2Total - stat1Total
+	ttlIdle := stat2Idle - stat1Idle
+
+	var cpuPercentUsage float64
+	if ttl == 0 && ttlIdle == 0 {
+		cpuPercentUsage = 0.00
+	} else {
+		cpuPercentUsage = (float64(ttl) - float64(ttlIdle)) / float64(ttl)
+	}
+	return &cpuPercentUsage, nil
 }
 
+// getNodeStats is a helper function that makes the requests to the Node's "/stats/" endpoint to retrieve the stats from the Node.
 func getNodeStats(node *node.Node) *stats.Stats {
 	url := fmt.Sprintf("%s/stats", node.Api)
 	res, err := http.Get(url)
@@ -75,6 +100,8 @@ func getNodeStats(node *node.Node) *stats.Stats {
 	body, _ := io.ReadAll(res.Body)
 
 	var status stats.Stats
-	json.Unmarshal(body, &status)
+	if err := json.Unmarshal(body, &status); err != nil {
+		log.Printf("failed to unmarshal JSON data into Status object: %s\n", err)
+	}
 	return &status
 }

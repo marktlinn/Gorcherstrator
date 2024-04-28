@@ -72,7 +72,21 @@ func (g *Epvm) Score(t task.Task, nodes []*node.Node) map[string]float64 {
 	return nodesScores
 }
 
-func (g *Epvm) Pick(candidates map[string]float64, nodes []*node.Node) *node.Node {
-	// TODO:
-	return nil
+func (g *Epvm) Pick(scores map[string]float64, candidates []*node.Node) *node.Node {
+	minCost := 0.00
+	var topNode *node.Node
+
+	for i, node := range candidates {
+		if i == 0 {
+			minCost = scores[node.Name]
+			topNode = node
+			continue
+		}
+
+		if scores[node.Name] < minCost {
+			minCost = scores[node.Name]
+			topNode = node
+		}
+	}
+	return topNode
 }
