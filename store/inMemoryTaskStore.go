@@ -18,9 +18,13 @@ func NewInMemoryTaskStore() *InMemoryTaskStore {
 	}
 }
 
+// Get retrieves a task from the InMemoryTaskStore and returns it.
 func (i *InMemoryTaskStore) Get(key string) (any, error) {
-	// TODO: complete.
-	return nil, nil
+	task, ok := i.DB[key]
+	if !ok {
+		return nil, fmt.Errorf("failed to find task %s; does it exist?\n", key)
+	}
+	return task, nil
 }
 
 // Put inserts a key value pair into the NewInMemoryTaskStore, asserting first that the value is a pointer to a task.Task.
@@ -31,4 +35,20 @@ func (i *InMemoryTaskStore) Put(key string, value any) error {
 	}
 	i.DB[key] = task
 	return nil
+}
+
+// List creates a slice equal to the number of tasks in the InMemoryTaskStore
+// DB, appends each task to the list and returns the list.
+func (i *InMemoryTaskStore) List() (any, error) {
+	var taskList []*task.Task = make([]*task.Task, len(i.DB))
+
+	for _, t := range i.DB {
+		taskList = append(taskList, t)
+	}
+	return taskList, nil
+}
+
+// Count returns the number of tasks in the InMemoryTaskStore DB.
+func (i *InMemoryTaskStore) Count() (int, error) {
+	return len(i.DB), nil
 }
