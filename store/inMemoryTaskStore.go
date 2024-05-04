@@ -11,7 +11,7 @@ type InMemoryTaskStore struct {
 	DB map[string]*task.Task
 }
 
-// NewInMemoryTaskStore creates a new InMemoryTaskStore and returned a reference to it.
+// NewInMemoryTaskStore creates a new InMemoryTaskStore and returns a reference to it.
 func NewInMemoryTaskStore() *InMemoryTaskStore {
 	return &InMemoryTaskStore{
 		DB: make(map[string]*task.Task),
