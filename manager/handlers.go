@@ -63,10 +63,11 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tID, _ := uuid.Parse(taskID)
-	targetTask, ok := a.Manager.TaskDB[tID]
-	if !ok {
+	targetTask, err := a.Manager.TaskDB.Get(tID.String())
+	if err != nil {
 		log.Printf("Failed to find Task with ID: %s\n", tID)
 		w.WriteHeader(404)
+		return
 	}
 
 	taskEvent := task.TaskEvent{
@@ -75,21 +76,21 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now(),
 	}
 
-	cpyTargetTask := *targetTask
-	cpyTargetTask.State = task.Complete
-	taskEvent.Task = cpyTargetTask
+	cpyTargetTask := targetTask.(*task.Task)
+	taskEvent.Task = *cpyTargetTask
 	a.Manager.AddTask(taskEvent)
 
-	log.Printf("Task %v added to Manager's stop Queue", targetTask.ID)
+	log.Printf("Task %v added to Manager's stop Queue\n", cpyTargetTask.ID)
 	w.WriteHeader(204)
 }
 
 // GetTasks is a helper function which constructs and returns a slice of
 // pointers to the tasks in the Manager's DB.
 func (m *Manager) GetTasks() []*task.Task {
-	tasks := []*task.Task{}
-	for _, t := range m.TaskDB {
-		tasks = append(tasks, t)
+	tasksList, err := m.TaskDB.List()
+	if err != nil {
+		log.Printf("failed to get list of tasks in %v\n", err)
 	}
-	return tasks
+
+	return tasksList.([]*task.Task)
 }

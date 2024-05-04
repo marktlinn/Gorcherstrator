@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/marktlinn/Gorcherstrator/node"
 	"github.com/marktlinn/Gorcherstrator/scheduler"
+	"github.com/marktlinn/Gorcherstrator/store"
 	"github.com/marktlinn/Gorcherstrator/task"
 	"github.com/marktlinn/Gorcherstrator/worker"
 )
@@ -32,10 +33,10 @@ type Manager struct {
 	// LastWorker represents the index of the last Worker in the Workers slice.
 	LastWorker int
 	Pending    queue.Queue
-	// TaskDB holds references to all tasks across all workers.
-	TaskDB map[uuid.UUID]*task.Task
-	// EventDB holds references to all tasks' metadata.
-	EventDB map[uuid.UUID]*task.TaskEvent
+	// TaskDB holds references to all Tasks data in a datastore.
+	TaskDB store.Store
+	// EventDB holds references to Tasks' metadata in a datastore.
+	EventDB store.Store
 	// A slice of worker nodes.
 	WorkerNodes []*node.Node
 	// The Scheduler type to be used for scheduling Tasks.
@@ -44,9 +45,7 @@ type Manager struct {
 
 // New instantiates a new Manager and returns a pointer to the newly
 // instantiated Manager.
-func New(workers []string, schedulerType string) *Manager {
-	taskDB := make(map[uuid.UUID]*task.Task)
-	eventDB := make(map[uuid.UUID]*task.TaskEvent)
+func New(workers []string, schedulerType, dbType string) *Manager {
 	taskWorkerMap := make(map[uuid.UUID]string)
 	workerTaskMap := make(map[string][]uuid.UUID)
 
@@ -60,16 +59,27 @@ func New(workers []string, schedulerType string) *Manager {
 	}
 
 	s := scheduler.SetSchedulerType(schedulerType)
-	return &Manager{
+
+	m := Manager{
 		Workers:       workers,
-		TaskDB:        taskDB,
-		EventDB:       eventDB,
 		Pending:       *queue.New(),
 		TaskWorkerMap: taskWorkerMap,
 		WorkerTaskMap: workerTaskMap,
 		Scheduler:     s,
 		WorkerNodes:   nodes,
 	}
+
+	var taskStore store.Store
+	var eventStore store.Store
+	switch dbType {
+	case "memory":
+		taskStore = store.NewInMemoryTaskStore()
+		eventStore = store.NewInMemoryEventStore()
+	}
+
+	m.TaskDB = taskStore
+	m.EventDB = eventStore
+	return &m
 }
 
 // SelectWorker makes use of the Scheduler interface to to nominate an appropriate Worker to receive a Task. If no Worker is found, or no appropriate candidates are given an error is returned.
@@ -96,11 +106,24 @@ func (m *Manager) SendWork() {
 	t := m.Pending.Dequeue()
 	taskEvent := t.(task.TaskEvent)
 
-	m.EventDB[taskEvent.ID] = &taskEvent
+	err := m.EventDB.Put(taskEvent.ID.String(), &taskEvent)
+	if err != nil {
+		log.Printf("failed to insert task into store %s: %s\n", taskEvent.ID, err)
+	}
 
 	taskWorker, ok := m.TaskWorkerMap[taskEvent.Task.ID]
 	if ok {
-		persistedTask := m.TaskDB[taskEvent.Task.ID]
+		res, err := m.TaskDB.Get(taskEvent.Task.ID.String())
+		if err != nil {
+			log.Printf("failed to schedule task: %s\n", err)
+			return
+		}
+		persistedTask, ok := res.(*task.Task)
+		if !ok {
+			log.Printf("failed to convert task %v to type task.Task\n", res)
+			return
+		}
+
 		if taskEvent.State == task.Complete &&
 			task.ValidStateTransition(persistedTask.State, taskEvent.State) {
 			m.stopTask(taskWorker, taskEvent.Task.ID.String())
@@ -118,9 +141,12 @@ func (m *Manager) SendWork() {
 	m.TaskWorkerMap[tsk.ID] = w.Name
 
 	tsk.State = task.Scheduled
+	if putErr := m.TaskDB.Put(tsk.ID.String(), &tsk); putErr != nil {
+		log.Printf("failed to put task %s in taskDB: %s\n", tsk.ID, putErr)
+	}
 
-	data, err := json.Marshal(taskEvent)
-	if err != nil {
+	data, marshalErr := json.Marshal(taskEvent)
+	if marshalErr != nil {
 		log.Printf("failed to marshal task %+v\n", taskEvent)
 	}
 
@@ -165,13 +191,8 @@ func (m *Manager) UpdateTasks() {
 }
 
 func (m *Manager) updateTasks() {
-	tasks, err := collectTasks(m)
-	if err != nil {
-		log.Printf("failed to generate slice of tasks: %s\n", err)
-	}
-	if err := updateCollectedTasks(tasks, m); err != nil {
-		log.Printf("failed to update tasks in Manager: %s", err)
-	}
+	tasks := collectTasks(m)
+	m.updateCollectedTasks(tasks)
 }
 
 // stopTask is a helper function helping connect to the correct Worker where a Task is running and scheduling for that Task to be gracefully terminated.
@@ -215,8 +236,8 @@ func (m *Manager) AddTask(te task.TaskEvent) {
 }
 
 // collectTasks loops through all the tasks in the Manager's Workers.
-// It returns a reference to a slice ot all the tasks found across all Workers.
-func collectTasks(m *Manager) ([]*task.Task, error) {
+// It returns a reference to a slice of all the tasks found across all Workers.
+func collectTasks(m *Manager) []*task.Task {
 	var tasks []*task.Task
 
 	for _, worker := range m.Workers {
@@ -224,7 +245,7 @@ func collectTasks(m *Manager) ([]*task.Task, error) {
 		url := fmt.Sprintf("http://%s/tasks", worker)
 		res, err := http.Get(url)
 		if err != nil {
-			return nil, fmt.Errorf(
+			fmt.Printf(
 				"failed to get tasks from worker %s at url: %s; %s\n",
 				worker,
 				url,
@@ -234,17 +255,18 @@ func collectTasks(m *Manager) ([]*task.Task, error) {
 		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to send request: %s\n", err)
+			fmt.Printf("failed to send request: %s\n", err)
 		}
 
 		data := json.NewDecoder(res.Body)
-
-		err = data.Decode(&tasks)
+		var t *task.Task
+		err = data.Decode(&t)
 		if err != nil && errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("failed to unmarshall task data: %s\n", err)
+			fmt.Printf("failed to unmarshall task data: %s\n", err)
 		}
+		tasks = append(tasks, t)
 	}
-	return tasks, nil
+	return tasks
 }
 
 // RunHealthChecks ensures running tasks are pinged at a setinterval to ensure they are running correctly.
@@ -319,8 +341,9 @@ func (m *Manager) restartTask(t *task.Task) {
 	t.State = task.Scheduled
 	t.RestartCount++
 
-	m.TaskDB[t.ID] = t
-
+	if putErr := m.TaskDB.Put(t.ID.String(), t); putErr != nil {
+		log.Printf("failed to put task %s in taskDB: %s\n", t.ID, putErr)
+	}
 	taskEvent := task.TaskEvent{
 		ID:        uuid.New(),
 		Task:      *t,
@@ -372,22 +395,30 @@ func (m *Manager) restartTask(t *task.Task) {
 // updateCollectedTasks loops through the slice of provided tasks
 // and synchronises the the state of the Task with the state of the Task
 // of matching ID in the Manager's TaskDB.
-func updateCollectedTasks(tasks []*task.Task, m *Manager) error {
+func (m *Manager) updateCollectedTasks(tasks []*task.Task) {
 	for _, t := range tasks {
 		log.Printf("updating tasks...")
+		res, err := m.TaskDB.Get(t.ID.String())
+		if err != nil {
+			log.Printf("failed to get task for Manager %s\n", err)
+			continue
+		}
 
-		_, ok := m.TaskDB[t.ID]
+		taskPersisted, ok := res.(*task.Task)
 		if !ok {
-			return fmt.Errorf("failed to find task with id: %s\n", t.ID)
+			log.Printf("failed to convert %v to type task.Task\n", res)
+		}
+		if taskPersisted.State != t.State {
+			taskPersisted.State = t.State
 		}
 
-		if m.TaskDB[t.ID].State != t.State {
-			m.TaskDB[t.ID].State = t.State
-		}
+		taskPersisted.StartTime = t.StartTime
+		taskPersisted.FinishTime = t.FinishTime
+		taskPersisted.ContainerID = t.ContainerID
+		taskPersisted.HostPorts = t.HostPorts
 
-		m.TaskDB[t.ID].ContainerID = t.ContainerID
-		m.TaskDB[t.ID].StartTime = t.StartTime
-		m.TaskDB[t.ID].FinishTime = t.FinishTime
+		if putErr := m.TaskDB.Put(taskPersisted.ID.String(), taskPersisted); putErr != nil {
+			log.Printf("failed to put task %s in taskDB: %s\n", taskPersisted.ID, putErr)
+		}
 	}
-	return nil
 }
