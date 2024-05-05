@@ -190,9 +190,35 @@ func (m *Manager) UpdateTasks() {
 	}
 }
 
+// updateTasks is a helper function that gets all tasks from each Worker, then ensures the state of each Task
+// is in sync with the TaskDB store.
 func (m *Manager) updateTasks() {
-	tasks := collectTasks(m)
-	m.updateCollectedTasks(tasks)
+	for _, worker := range m.Workers {
+		log.Printf("getting tasks from worker %v\n", worker)
+		url := fmt.Sprintf("http://%s/tasks", worker)
+		res, err := http.Get(url)
+		if err != nil {
+			fmt.Printf(
+				"failed to get tasks from worker %s at url: %s; %s\n",
+				worker,
+				url,
+				err,
+			)
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode != http.StatusOK {
+			fmt.Printf("failed to send request: %s\n", err)
+		}
+
+		data := json.NewDecoder(res.Body)
+		var t []*task.Task
+		err = data.Decode(&t)
+		if err != nil && errors.Is(err, io.EOF) {
+			fmt.Printf("failed to unmarshall task data: %s\n", err)
+		}
+		updateCollectedTasks(t, m)
+	}
 }
 
 // stopTask is a helper function helping connect to the correct Worker where a Task is running and scheduling for that Task to be gracefully terminated.
@@ -235,38 +261,35 @@ func (m *Manager) AddTask(te task.TaskEvent) {
 	m.Pending.Enqueue(te)
 }
 
-// collectTasks loops through all the tasks in the Manager's Workers.
-// It returns a reference to a slice of all the tasks found across all Workers.
-func collectTasks(m *Manager) []*task.Task {
-	var tasks []*task.Task
-
-	for _, worker := range m.Workers {
-		log.Printf("getting tasks from worker %v\n", worker)
-		url := fmt.Sprintf("http://%s/tasks", worker)
-		res, err := http.Get(url)
+// updateCollectedTasks loops through the slice of provided tasks
+// and synchronises the the state of the Task with the state of the Task
+// of matching ID in the Manager's TaskDB.
+func updateCollectedTasks(tasks []*task.Task, m *Manager) {
+	for _, t := range tasks {
+		log.Printf("updating tasks...")
+		res, err := m.TaskDB.Get(t.ID.String())
 		if err != nil {
-			fmt.Printf(
-				"failed to get tasks from worker %s at url: %s; %s\n",
-				worker,
-				url,
-				err,
-			)
-		}
-		defer res.Body.Close()
-
-		if res.StatusCode != http.StatusOK {
-			fmt.Printf("failed to send request: %s\n", err)
+			log.Printf("failed to get task for Manager %s\n", err)
+			continue
 		}
 
-		data := json.NewDecoder(res.Body)
-		var t *task.Task
-		err = data.Decode(&t)
-		if err != nil && errors.Is(err, io.EOF) {
-			fmt.Printf("failed to unmarshall task data: %s\n", err)
+		taskPersisted, ok := res.(*task.Task)
+		if !ok {
+			log.Printf("failed to convert %v to type task.Task\n", res)
 		}
-		tasks = append(tasks, t)
+		if taskPersisted.State != t.State {
+			taskPersisted.State = t.State
+		}
+
+		taskPersisted.StartTime = t.StartTime
+		taskPersisted.FinishTime = t.FinishTime
+		taskPersisted.ContainerID = t.ContainerID
+		taskPersisted.HostPorts = t.HostPorts
+
+		if putErr := m.TaskDB.Put(taskPersisted.ID.String(), taskPersisted); putErr != nil {
+			log.Printf("failed to put task %s in taskDB: %s\n", taskPersisted.ID, putErr)
+		}
 	}
-	return tasks
 }
 
 // RunHealthChecks ensures running tasks are pinged at a setinterval to ensure they are running correctly.
@@ -389,36 +412,5 @@ func (m *Manager) restartTask(t *task.Task) {
 	err = d.Decode(&newTask)
 	if err != nil {
 		fmt.Printf("failed to decode New Task %+v: %s\n", newTask, err)
-	}
-}
-
-// updateCollectedTasks loops through the slice of provided tasks
-// and synchronises the the state of the Task with the state of the Task
-// of matching ID in the Manager's TaskDB.
-func (m *Manager) updateCollectedTasks(tasks []*task.Task) {
-	for _, t := range tasks {
-		log.Printf("updating tasks...")
-		res, err := m.TaskDB.Get(t.ID.String())
-		if err != nil {
-			log.Printf("failed to get task for Manager %s\n", err)
-			continue
-		}
-
-		taskPersisted, ok := res.(*task.Task)
-		if !ok {
-			log.Printf("failed to convert %v to type task.Task\n", res)
-		}
-		if taskPersisted.State != t.State {
-			taskPersisted.State = t.State
-		}
-
-		taskPersisted.StartTime = t.StartTime
-		taskPersisted.FinishTime = t.FinishTime
-		taskPersisted.ContainerID = t.ContainerID
-		taskPersisted.HostPorts = t.HostPorts
-
-		if putErr := m.TaskDB.Put(taskPersisted.ID.String(), taskPersisted); putErr != nil {
-			log.Printf("failed to put task %s in taskDB: %s\n", taskPersisted.ID, putErr)
-		}
 	}
 }
