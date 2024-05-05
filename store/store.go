@@ -7,3 +7,7 @@ type Store interface {
 	Count() (int, error)
 	List() (any, error)
 }
+
+const (
+	MEMORY = "memory"
+)

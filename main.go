@@ -7,11 +7,8 @@ import (
 
 	"github.com/marktlinn/Gorcherstrator/manager"
 	"github.com/marktlinn/Gorcherstrator/scheduler"
-	"github.com/marktlinn/Gorcherstrator/task"
+	"github.com/marktlinn/Gorcherstrator/store"
 	"github.com/marktlinn/Gorcherstrator/worker"
-
-	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 )
 
 func main() {
@@ -23,22 +20,14 @@ func main() {
 
 	fmt.Println("Starting Worker")
 
-	w1 := worker.Worker{
-		Queue: *queue.New(),
-		DB:    make(map[uuid.UUID]*task.Task),
-	}
-	workerApi := worker.Api{Address: wHost, Port: wPort, Worker: &w1}
-	w2 := worker.Worker{
-		Queue: *queue.New(),
-		DB:    make(map[uuid.UUID]*task.Task),
-	}
-	workerApi2 := worker.Api{Address: wHost, Port: wPort + 1, Worker: &w2}
+	w1 := worker.New("ex_worker1", store.MEMORY)
+	workerApi := worker.Api{Address: wHost, Port: wPort, Worker: w1}
 
-	w3 := worker.Worker{
-		Queue: *queue.New(),
-		DB:    make(map[uuid.UUID]*task.Task),
-	}
-	workerApi3 := worker.Api{Address: wHost, Port: wPort + 2, Worker: &w3}
+	w2 := worker.New("ex_worker2", store.MEMORY)
+	workerApi2 := worker.Api{Address: wHost, Port: wPort + 1, Worker: w2}
+
+	w3 := worker.New("ex_worker3", store.MEMORY)
+	workerApi3 := worker.Api{Address: wHost, Port: wPort + 2, Worker: w3}
 
 	go w1.RunTasks()
 	go w1.CollectStats()
@@ -61,7 +50,7 @@ func main() {
 		fmt.Sprintf("%s:%d", wHost, wPort+2),
 	}
 
-	m := manager.New(workers, scheduler.EPVM)
+	m := manager.New(workers, scheduler.EPVM, store.MEMORY)
 	managerApi := manager.Api{Address: mHost, Port: mPort, Manager: m}
 
 	go m.ProcessTasks()

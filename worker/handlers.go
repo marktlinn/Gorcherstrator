@@ -60,20 +60,19 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	taskUUID, _ := uuid.Parse(taskID)
 	fmt.Printf("UUID found: %v\n", taskUUID)
-	_, ok := a.Worker.DB[taskUUID]
-	if !ok {
+	targetTask, err := a.Worker.DB.Get(taskUUID.String())
+	if err != nil {
 		log.Printf("No task matches task ID %v\n", taskUUID)
 		w.WriteHeader(404)
 	}
 
-	targetTask := a.Worker.DB[taskUUID]
 	fmt.Printf("TargetTask: %+v\n", targetTask)
-	copiedTask := *targetTask
+	copiedTask := *targetTask.(*task.Task)
 	fmt.Printf("copiedTask: %+v\n", copiedTask)
 	copiedTask.State = task.Complete
 	a.Worker.QueueTask(copiedTask)
 
-	log.Printf("Task %v added to worker %s stop Queue", targetTask.ID, a.Worker.Name)
+	log.Printf("Task %v added to worker %s stop Queue", copiedTask.ID.String(), a.Worker.Name)
 	w.WriteHeader(204)
 }
 
@@ -84,5 +83,29 @@ func (a *Api) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	if err := json.NewEncoder(w).Encode(a.Worker.Stats); err != nil {
 		log.Printf("failed to get stats: %s\n", err)
+	}
+}
+
+func (a *Api) InspectTaskHandler(w http.ResponseWriter, r *http.Request) {
+	taskID := r.PathValue("taskID")
+	if taskID == "" {
+		log.Printf("No taskID passed in request.\n")
+		w.WriteHeader(400)
+	}
+
+	taskUUID, _ := uuid.Parse(taskID)
+	t, err := a.Worker.DB.Get(taskUUID.String())
+	if err != nil {
+		log.Printf("No task with ID %s found: %s\n", taskUUID.String(), err)
+		w.WriteHeader(404)
+		return
+	}
+
+	res := a.Worker.InspectTask(t.(task.Task))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	if err := json.NewEncoder(w).Encode(res.Container); err != nil {
+		log.Printf("failed to encode response: %s\n", err)
 	}
 }

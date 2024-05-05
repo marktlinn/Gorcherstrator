@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 	"github.com/marktlinn/Gorcherstrator/stats"
+	"github.com/marktlinn/Gorcherstrator/store"
 	"github.com/marktlinn/Gorcherstrator/task"
 )
 
@@ -23,28 +23,28 @@ type Worker struct {
 	Queue queue.Queue
 	Name  string
 	// DB represents the current actual state of the Tasks.
-	DB        map[uuid.UUID]*task.Task
+	DB        store.Store
 	Stats     *stats.Stats
 	TaskCount int
 }
 
-// StopTask stops a Task which is running on the Worker, gracefully.
-func (w *Worker) StopTask(t task.Task) task.DockerResult {
-	config := task.NewConfig(&t)
-	docker := task.NewDocker(config)
-
-	result := docker.Stop(t.ContainerID)
-	if result.Error != nil {
-		log.Printf("Error stopping container %v: %v\n",
-			t.ContainerID,
-			result.Error,
-		)
+// New creates a new instance of a TaskSTore of the specified DbType
+func New(name, dbType string) *Worker {
+	w := Worker{
+		Name:  name,
+		Queue: *queue.New(),
 	}
-	t.FinishTime = time.Now().UTC()
-	t.State = task.Complete
-	w.DB[t.ID] = &t
-	log.Printf("Container %v stopped and removed for task %v", t.ContainerID, t.ID)
-	return result
+
+	var s store.Store
+	switch dbType {
+	case store.MEMORY:
+		s = store.NewInMemoryTaskStore()
+	default:
+		log.Printf("failed to create taskDBStore of type '%s'\n", dbType)
+		return nil
+	}
+	w.DB = s
+	return &w
 }
 
 // Starts a task, setting the start time of the task
@@ -54,19 +54,22 @@ func (w *Worker) StartTask(t task.Task) task.DockerResult {
 	t.StartTime = time.Now().UTC()
 	config := task.NewConfig(&t)
 	d := task.NewDocker(config)
-	result := d.Run()
 
+	result := d.Run()
 	if result.Error != nil {
 		log.Printf("Error running task %v: %v\n", t.ID, result.Error)
-		w.DB[t.ID] = &t
+		if err := w.DB.Put(t.ID.String(), &t); err != nil {
+			log.Printf("failed to insert task %s into store: %s\n", t.ID.String(), err)
+		}
 		t.State = task.Failed
 		return result
 	}
 
 	t.State = task.Running
 	t.ContainerID = result.ContainerID
-	w.DB[t.ID] = &t
-
+	if err := w.DB.Put(t.ID.String(), &t); err != nil {
+		log.Printf("failed to insert task %s into store: %s\n", t.ID.String(), err)
+	}
 	return result
 }
 
@@ -101,13 +104,18 @@ func (w *Worker) UpdateTasks() {
 // updateTasks is a helper method. The updateTasks method, simply queries thetask's state from the Docker daemon. to determine if the task's state is `running` or not.
 // If not the task's state is not `running`, it sets it to `failed`.
 func (w *Worker) updateTasks() {
-	for id, t := range w.DB {
+	tasks, err := w.DB.List()
+	if err != nil {
+		log.Printf("failed to get tasks list: %s\n", err)
+		return
+	}
+
+	for _, t := range tasks.([]*task.Task) {
 		if t.State == task.Running {
 			res := w.InspectTask(*t)
 			if res.Error != nil {
 				log.Printf(
-					"failed to inspect task %s in docker container: %s\n",
-					id,
+					"failed to inspect task %s in docker container: %s\n", t.ID.String(),
 					res.Error,
 				)
 			}
@@ -115,24 +123,54 @@ func (w *Worker) updateTasks() {
 			if res.Container == nil {
 				log.Printf(
 					"failed to locate Docker container for task %s in response: %+v\n",
-					id,
+					t.ID.String(),
 					res,
 				)
-				w.DB[id].State = task.Failed
+				if err := w.DB.Put(t.ID.String(), t); err != nil {
+					log.Printf("failed to insert task %s into store: %s\n", t.ID.String(), err)
+				}
+				t.State = task.Failed
 			}
 
 			if res.Container.State.Status == "exited" {
 				log.Printf(
-					"Container for task %s, not running, found in %s state\n",
-					id,
+					"Container for task %s, not running, found in %s state\n", t.ID.String(),
 					res.Container.State.Status,
 				)
-				w.DB[id].State = task.Failed
+				if err := w.DB.Put(t.ID.String(), t); err != nil {
+					log.Printf("failed to insert task %s into store: %s\n", t.ID.String(), err)
+				}
+				t.State = task.Failed
 			}
 
-			w.DB[id].HostPorts = res.Container.NetworkSettings.NetworkSettingsBase.Ports
+			t.HostPorts = res.Container.NetworkSettings.NetworkSettingsBase.Ports
+			if err := w.DB.Put(t.ID.String(), t); err != nil {
+				log.Printf("failed to insert task %s into store: %s\n", t.ID.String(), err)
+			}
 		}
 	}
+}
+
+// StopTask stops a Task which is running on the Worker, gracefully.
+func (w *Worker) StopTask(t task.Task) task.DockerResult {
+	config := task.NewConfig(&t)
+	docker := task.NewDocker(config)
+
+	result := docker.Stop(t.ContainerID)
+	if result.Error != nil {
+		log.Printf("Error stopping container %v: %v\n",
+			t.ContainerID,
+			result.Error,
+		)
+	}
+
+	t.FinishTime = time.Now().UTC()
+	t.State = task.Complete
+	if err := w.DB.Put(t.ID.String(), &t); err != nil {
+		log.Printf("failed to insert task %s into store: %s\n", t.ID.String(), err)
+	}
+	log.Printf("Container %v stopped and removed for task %v", t.ContainerID, t.ID)
+	return result
 }
 
 // InspectTask sets up a task config and Docker instance in order to allow for interaction with the running Docker daemon which is running on the given Worker.
@@ -149,11 +187,12 @@ func (w *Worker) QueueTask(t task.Task) {
 
 // GetTasks returns a lists of Tasks within the Worker's DB.
 func (w *Worker) GetTasks() []*task.Task {
-	tasks := []*task.Task{}
-	for _, t := range w.DB {
-		tasks = append(tasks, t)
+	tasks, err := w.DB.List()
+	if err != nil {
+		log.Printf("failed to create list of tasks %s\n", err)
+		return nil
 	}
-	return tasks
+	return tasks.([]*task.Task)
 }
 
 // CollectStats runs GetStats() to maintain an up-to-date collection of stats from a Worker about the Worker and its Tasks.
@@ -179,28 +218,36 @@ func (w *Worker) runTask() task.DockerResult {
 		return task.DockerResult{Error: nil}
 	}
 
-	queuedTask := t.(task.Task)
+	taskToPutInDb := t.(task.Task)
 
-	taskPersisted := w.DB[queuedTask.ID]
-	if taskPersisted == nil {
-		taskPersisted = &queuedTask
-		w.DB[queuedTask.ID] = &queuedTask
+	if err := w.DB.Put(taskToPutInDb.ID.String(), &taskToPutInDb); err != nil {
+		errMsg := fmt.Errorf("failed to store task %s in DB: %s\n", taskToPutInDb.ID, err)
+		log.Println(errMsg)
+		return task.DockerResult{Error: errMsg}
 	}
 
+	taskGotFromDB, err := w.DB.Get(taskToPutInDb.ID.String())
+	if err != nil {
+		errMsg := fmt.Errorf("failed to GET task %s from DB: %s\n", taskToPutInDb.ID, err)
+		return task.DockerResult{Error: errMsg}
+	}
+
+	taskPersisted := *taskGotFromDB.(*task.Task)
+
 	var result task.DockerResult
-	if task.ValidStateTransition(taskPersisted.State, queuedTask.State) {
-		switch queuedTask.State {
+	if task.ValidStateTransition(taskPersisted.State, taskToPutInDb.State) {
+		switch taskToPutInDb.State {
 		case task.Scheduled:
-			result = w.StartTask(queuedTask)
+			result = w.StartTask(taskToPutInDb)
 		case task.Complete:
-			result = w.StopTask(queuedTask)
+			result = w.StopTask(taskToPutInDb)
 		default:
-			unexpectedError := fmt.Errorf("undefined state of queued task: %+v\n", queuedTask.State).
+			unexpectedError := fmt.Errorf("undefined state of queued task: %+v\n", taskToPutInDb.State).
 				Error()
 			result.Error = errors.New(unexpectedError)
 		}
 	} else {
-		err := fmt.Errorf("error: transition from %+v to %+v is not valid", taskPersisted.State, queuedTask.State)
+		err := fmt.Errorf("error: transition from %+v to %+v is not valid", taskPersisted.State, taskToPutInDb.State)
 		result.Error = err
 	}
 
